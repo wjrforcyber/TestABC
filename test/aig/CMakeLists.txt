@@ -1,7 +1,4 @@
-add_executable(aig 
-    aig.cc 
-    ${CMAKE_SOURCE_DIR}/src/base/abci/abcResub.c
-)
+add_executable(aig aig.cc)
 
 target_link_libraries(aig
     gtest_main
