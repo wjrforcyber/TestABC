@@ -5,6 +5,8 @@ This is a fork version of the original Berkeley's [ABC](https://github.com/berke
 ## Build
 The test framework is googletest, it was added in the original ABC in CMake file, build with CMake:
 ```
+mkdir build
+cd build
 cmake -DCMAKE_BUILD_TYPE=Debug ..
 make
 ```
