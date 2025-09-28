@@ -13,6 +13,9 @@ make
 ```
 I suggest you enable `-DCMAKE_BUILD_TYPE=Debug` to get symbol table, so that you could launch lldb, gdb, etc. to debug if anything goes wrong.
 
+> [!WARNING]
+> Some workflows on Github actions keep complaining about the missing symbol, which I can't reproduce on my local device. Working on it.
+
 ## 🧪 Test list
 This section will include all the tests and test suite.
 
