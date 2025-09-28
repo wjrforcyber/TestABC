@@ -5,6 +5,24 @@
 #include "misc/util/abc_namespaces.h"
 #include "misc/vec/vecPtr.h"
 
+#if defined(ABC_NAMESPACE)
+namespace ABC_NAMESPACE
+{
+#elif defined(__cplusplus)
+extern "C"
+{
+#endif
+
+void Abc_ManResubSimulate( Vec_Ptr_t * vDivs, int nLeaves, Vec_Ptr_t * vSims, int nLeavesMax, int nWords );
+
+#if defined(ABC_NAMESPACE)
+}
+using namespace ABC_NAMESPACE;
+#elif defined(__cplusplus)
+}
+#endif
+
+
 ABC_NAMESPACE_IMPL_START
 
 /*!
@@ -94,9 +112,6 @@ TEST(AigTest, StructureAnalysisAig) {
     Abc_NtkDelete(pNtk);
 }
 
-extern "C" {
-    void Abc_ManResubSimulate(Vec_Ptr_t_*, int, Vec_Ptr_t_*, int, int);
-}
 /*!
  \brief Analysis simulation on different cases
 */
