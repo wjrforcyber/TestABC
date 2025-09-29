@@ -240,5 +240,80 @@ TEST(AigTest, SimulationAig) {
     Abc_NtkDelete(pNtk);
 }
 
+/*!
+ \brief Analysis simulation on complex cases, an MFFC from i10.aig.
+*/
+TEST(AigTest, Simulation6InputsAig) {
+    Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    int nInputs = 6;
+    int nOutputs = 1;
+    int i = 0, k = 0;
+    Abc_Obj_t * pObj;
+    // create the PIs
+    for ( i = 0; i < nInputs; i++ )
+    {
+        pObj = Abc_NtkCreatePi(pNtk);    
+    }
+    // create the POs
+    for ( i = 0; i < nOutputs; i++ )
+    {
+        pObj = Abc_NtkCreatePo(pNtk);   
+    }
+    
+    Vec_Ptr_t * vNodes = Vec_PtrAlloc(10);
+    Abc_Obj_t * pi00 = Abc_NtkPi(pNtk, 0);
+    Vec_PtrPush(vNodes, pi00);
+    Abc_Obj_t * pi01 = Abc_NtkPi(pNtk, 1);
+    Vec_PtrPush(vNodes, pi01);
+    Abc_Obj_t * pi02 = Abc_NtkPi(pNtk, 2);
+    Vec_PtrPush(vNodes, pi02);
+    Abc_Obj_t * pi03 = Abc_NtkPi(pNtk, 3);
+    Vec_PtrPush(vNodes, pi03);
+    Abc_Obj_t * pi04 = Abc_NtkPi(pNtk, 4);
+    Vec_PtrPush(vNodes, pi04);
+    Abc_Obj_t * pi05 = Abc_NtkPi(pNtk, 5);
+    Vec_PtrPush(vNodes, pi05);
+    Abc_Obj_t * pN2012 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi01), pi02);
+    Vec_PtrPush(vNodes, pN2012);
+    Abc_Obj_t * pN2013 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi00, Abc_ObjNot(pN2012));
+    Vec_PtrPush(vNodes, pN2013);
+    Abc_Obj_t * pN2011 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi04), pi05);
+    Vec_PtrPush(vNodes, pN2011);
+    Abc_Obj_t * pN2014 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi03), Abc_ObjNot(pN2011));
+    Vec_PtrPush(vNodes, pN2014);
+    Abc_Obj_t * pRoot = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pN2013), pN2014);
+    Vec_PtrPush(vNodes, pRoot);
+    Abc_ObjAddFanin(Abc_NtkPo(pNtk, 0), Abc_ObjNot(pRoot));
+
+    int nBits      = (1 << 6);
+    int nWords     = (nBits <= 32)? 1 : (nBits / 32);
+    Vec_Ptr_t *vSims = Vec_PtrAlloc( 100 );
+    unsigned int *pInfo = ABC_ALLOC( unsigned, nWords * (100 + 1) );
+    unsigned int *pData;
+    for ( i = 0; i < 100; i++ )
+        Vec_PtrPush( vSims, pInfo + i * nWords );
+    // set elementary truth tables
+    for ( k = 0; k < 6; k++ )
+    {
+        pData = (unsigned *)vSims->pArray[k];
+        for ( i = 0; i < nBits; i++ )
+            if ( i & (1 << k) )
+                pData[i>>5] |= (1 << (i&31));
+    }
+    Abc_ManResubSimulate( vNodes, 6, vSims, 6, 2);
+    EXPECT_TRUE(*(uint64_t *)Abc_NtkPi(pNtk, 3)->pData == 0xff00ff00ff00ff00);
+    EXPECT_TRUE(*(uint64_t *)Abc_NtkPi(pNtk, 4)->pData == 0xffff0000ffff0000);
+    EXPECT_TRUE(*(uint64_t *)Abc_NtkPi(pNtk, 5)->pData == 0xffffffff00000000);
+    EXPECT_TRUE(*(uint64_t *)pN2011->pData == 0x0000ffff00000000);
+    // ~(0x00ff00ff00ff00ff & 0xffff0000ffffffff)
+    EXPECT_TRUE(*(uint64_t *)pN2014->pData == 0xff00ffffff00ff00);
+    EXPECT_TRUE(*(uint64_t *)pN2013->pData == 0x8a8a8a8a8a8a8a8a);
+    uint64_t uRoot = ~(~(*(uint64_t *)pN2013->pData) & ~(*(uint64_t *)pN2014->pData));
+    EXPECT_TRUE(*(uint64_t *)pRoot->pData == uRoot);
+    Vec_PtrFree(vNodes);
+    Vec_PtrFree(vSims);
+    ABC_FREE(pInfo);
+    Abc_NtkDelete(pNtk);
+}
 
 ABC_NAMESPACE_IMPL_END
