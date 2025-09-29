@@ -112,6 +112,43 @@ TEST(AigTest, StructureAnalysisAig) {
     Abc_NtkDelete(pNtk);
 }
 
+
+/*!
+ \brief Phases check after a clean AIG construction
+*/
+TEST(AigTest, PhasesAig) {
+    Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    int nInputs = 2;
+    int nOutputs = 4;
+    int i;
+    Abc_Obj_t * pObj;
+    Abc_ObjNot( Abc_AigConst1(pNtk) );
+
+    // create the PIs
+    for ( i = 0; i < nInputs; i++ )
+    {
+        pObj = Abc_NtkCreatePi(pNtk);    
+    }
+    // create the POs
+    for ( i = 0; i < nOutputs; i++ )
+    {
+        pObj = Abc_NtkCreatePo(pNtk);   
+    }
+    //create ANDs
+    Abc_Obj_t * pi00 = Abc_NtkPi(pNtk, 0);
+    Abc_Obj_t * pi01 = Abc_NtkPi(pNtk, 1);
+    Abc_ObjAddFanin( Abc_NtkPo(pNtk, 0), Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi00, pi01));
+    Abc_ObjAddFanin( Abc_NtkPo(pNtk, 1), Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi00), pi01));
+    Abc_ObjAddFanin( Abc_NtkPo(pNtk, 2), Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi00, Abc_ObjNot(pi01)));
+    Abc_ObjAddFanin( Abc_NtkPo(pNtk, 3), Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi00),Abc_ObjNot(pi01)));
+
+    // phases check after construction
+    EXPECT_TRUE(Abc_ObjFanin0(Abc_NtkPo(pNtk, 0))->fPhase == 0);
+    EXPECT_TRUE(Abc_ObjFanin0(Abc_NtkPo(pNtk, 1))->fPhase == 0);
+    EXPECT_TRUE(Abc_ObjFanin0(Abc_NtkPo(pNtk, 2))->fPhase == 0);
+    EXPECT_TRUE(Abc_ObjFanin0(Abc_NtkPo(pNtk, 3))->fPhase == 1);
+}
+
 /*!
  \brief Analysis simulation on different cases
 */
