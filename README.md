@@ -30,6 +30,7 @@ This section will include all the tests and test suite.
 <p align="center">
     <img src="./resources/images/2inputs4cases.png" width="250"/>
 </p>
+
 - `AigTest, SimulationAig` : Simulation on every condition of a 2 input AND gate. It shows a way isolated from `resub` to perform an exact simulation.
 - `AigTest, Simulation6InputsAig` : Give a detailed analysis on a 6-input window from a case i10.aig. Show the exact simulation result in some internal nodes. Check this example to get a deep comprehension about the phases and node encoding process. The window is structured as below:
 <p align="center">
