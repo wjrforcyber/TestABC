@@ -28,3 +28,7 @@ This section will include all the tests and test suite.
 - `AigTest, StructureAnalysisAig` : Analysis complemented attributes on simple AIG.
 - `AigTest, PhasesAig` : Phases are actually initialized in AIG when you call function `Abc_Obj_t * Abc_AigAnd( Abc_Aig_t * pMan, Abc_Obj_t * p0, Abc_Obj_t * p1 )`. It is determined by 4 factors, the **complemented attributes** and **regular node phases** of both $p_0$ and $p_1$.
 - `AigTest, SimulationAig` : Simulation on every condition of a 2 input AND gate. It shows a way isolated from `resub` to perform an exact simulation.
+- `AigTest, Simulation6InputsAig` : Give a detailed analysis on a 6-input window from a case i10.aig. Show the exact simulation result in some internal nodes. Check this example to get a deep comprehension about the phases and node encoding process. The window is structured as below:
+<p align="center">
+    <img src="./resources/images/SimulationCase.png" width="250"/>
+</p>
