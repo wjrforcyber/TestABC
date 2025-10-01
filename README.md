@@ -36,3 +36,8 @@ This section will include all the tests and test suite.
 <p align="center">
     <img src="./resources/images/SimulationCase.png" width="250"/>
 </p>
+
+- `AigTest, IsMuxAig` : Detecting if the current node is the root of a MUX. It is detecting a two level AIG, check the inverted attribute of the **children and grand children**. The tested example is shown below:
+<p align="center">
+    <img src="./resources/images/MuxDetection.png" width="150"/>
+</p>
