@@ -24,6 +24,7 @@ cmake --build build
 ## 🧪 Test list
 This section will include all the tests and test suite.
 
+### AIG
 - `AigTest, ConstructAig` : Construct a 2 input and 1 output AIG(A single AND node).
 - `AigTest, StructureAnalysisAig` : Analysis complemented attributes on simple AIG.
 - `AigTest, PhasesAig` : Phases are actually initialized in AIG when you call function `Abc_Obj_t * Abc_AigAnd( Abc_Aig_t * pMan, Abc_Obj_t * p0, Abc_Obj_t * p1 )`. It is determined by 4 factors, the **complemented attributes** and **regular node phases** of both $p_0$ and $p_1$.
@@ -41,3 +42,7 @@ This section will include all the tests and test suite.
 <p align="center">
     <img src="./resources/images/MuxDetection.png" width="150"/>
 </p>
+There's also an assert testing another interface detecting if the node is the control end of a MUX.
+
+### Cuts
+- `AigCutTest, CutTruthVarNumAig` : Testing the number of words needed to be allocated for a number of variables, node that in ABC, a word length is always considered as 32 bits.
