@@ -1,4 +1,4 @@
-add_executable(aig aig.cc)
+add_executable(aig aig.cc aigCut.cc)
 
 target_link_libraries(aig
     gtest_main
