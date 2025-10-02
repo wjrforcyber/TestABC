@@ -165,6 +165,7 @@ TEST(AigTest, IsMuxAig) {
     EXPECT_TRUE(and2->fPhase == 1);
     Abc_ObjAddFanin( po, and2 );
     EXPECT_TRUE(Abc_NodeIsMuxType(and2));
+    EXPECT_TRUE(pi0);
     Abc_NtkDelete(pNtk);
 }
 
