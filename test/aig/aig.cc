@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 
 #include "base/abc/abc.h"
+#include "base/io/ioAbc.h"
 #include "misc/util/abc_global.h"
 #include "misc/util/abc_namespaces.h"
 #include "misc/vec/vecPtr.h"
@@ -333,6 +334,20 @@ TEST(AigTest, Simulation6InputsAig) {
     Vec_PtrFree(vNodes);
     Vec_PtrFree(vSims);
     ABC_FREE(pInfo);
+    Abc_NtkDelete(pNtk);
+}
+
+/*!
+ \brief Directly read an aig from a file
+*/
+TEST(AigTest, ReadFromFileAig) {
+    char * pFileName = (char *)malloc(sizeof(char) * 100);
+    strcat(pFileName, PROJECT_ROOT_DIR);
+    strcat(pFileName, "/i10.aig");
+    Abc_Ntk_t * pNtk = Io_Read( pFileName, IO_FILE_AIGER, 1, 0 );
+    // A must assert, or ABC returns a segfault without checking the validity of pNtk
+    EXPECT_TRUE(pNtk != NULL);
+    EXPECT_TRUE(Abc_NtkCheck(pNtk) == 1);
     Abc_NtkDelete(pNtk);
 }
 
