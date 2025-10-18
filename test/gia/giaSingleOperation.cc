@@ -4,6 +4,7 @@
 #include "aig/gia/giaAig.h"
 #include "proof/cec/cec.h"
 
+ABC_NAMESPACE_IMPL_START
 /*!
   \brief
   Gia manager transform to Aig manager
@@ -60,3 +61,4 @@ TEST(GiaSingleOperation, Aig2Gia) {
     Gia_ManStop(pMiter);
     Aig_ManStop(pAig);
 }
+ABC_NAMESPACE_IMPL_END
