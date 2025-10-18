@@ -22,7 +22,26 @@ cmake --build build
 ```
 
 ## 🧪 Test list
-This section will include all the tests and test suite.
+This section will include all the tests and test suite. Current tests:
+```bash
+  Test  #1: GiaTest.CanAllocateGiaManager
+  Test  #2: GiaTest.CanAddACi
+  Test  #3: GiaTest.CanAddACo
+  Test  #4: GiaTest.CanAddAnAndGate
+  Test  #5: GiaSingleOperation.Gia2Aig
+  Test  #6: GiaSingleOperation.Aig2Gia
+  Test  #7: AigTest.ConstructAig
+  Test  #8: AigTest.StructureAnalysisAig
+  Test  #9: AigTest.PhasesAig
+  Test #10: AigTest.IsMuxAig
+  Test #11: AigTest.SimulationAig
+  Test #12: AigTest.Simulation6InputsAig
+  Test #13: AigTest.ReadFromFileAig
+  Test #14: AigTest.DuplicateAig
+  Test #15: AigCutTest.CutTruthVarNumAig
+
+Total Tests: 15
+```
 
 ### AIG
 - `AigTest, ConstructAig` : Construct a 2 input and 1 output AIG(A single AND node).
@@ -43,6 +62,11 @@ This section will include all the tests and test suite.
     <img src="./resources/images/MuxDetection.png" width="150"/>
 </p>
 There's also an assert testing another interface detecting if the node is the control end of a MUX.
+
+### Gia
+- `GiaSingleOperation, Gia2Aig` : `Gia` manager transform to `Aig` manager.
+
+- `GiaSingleOperation, Aig2Gia` : `Aig` manager transform to `Gia` manager with `&cec` interface verified.
 
 ### Cuts
 - `AigCutTest, CutTruthVarNumAig` : Testing the number of words needed to be allocated for a number of variables, node that in ABC, a word length is always considered as 32 bits.
