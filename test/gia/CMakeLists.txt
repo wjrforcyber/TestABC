@@ -1,10 +1,10 @@
-add_executable(gia_test gia_test.cc)
+add_executable(gia gia.cc giaSingleOperation.cc)
 
-target_link_libraries(gia_test
+target_link_libraries(gia
     gtest_main
     libabc
 )
 
-gtest_discover_tests(gia_test
+gtest_discover_tests(gia
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
