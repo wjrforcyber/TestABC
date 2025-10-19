@@ -18,6 +18,7 @@ void Abc_Start();
 void Abc_Stop();
 typedef struct Abc_Frame_t_ Abc_Frame_t;
 Abc_Frame_t * Abc_FrameGetGlobalFrame();
+Aig_Man_t * Abc_NtkToDar( Abc_Ntk_t * pNtk, int fExors, int fRegisters );
 Abc_Ntk_t *Abc_NtkFromAigPhase(Aig_Man_t *pMan);
 
 #if defined(ABC_NAMESPACE)
@@ -119,9 +120,57 @@ TEST(GiaSingleOperation, Gia2AigForOpt) {
     Abc_FrameReplaceCurrentNetwork( pAbc, pNtkRes );
     Gia_ManStop(giaMan);
     Aig_ManStop(pAig);
-    Abc_NtkDelete(pNtkRes);
     Abc_NtkDelete(pNtk);
+    Abc_Stop();
 }
 
+
+
+/*!
+  \brief
+  ABC9 to ABC for optimization. Then back to Gia. Omit as much high level structure as possible.
+*/
+TEST(GiaSingleOperation, Gia2AigForOptBack) {
+    Abc_Start();
+    Abc_Frame_t * pAbc = Abc_FrameGetGlobalFrame();
+    Gia_Man_t * giaMan = Gia_ManStart(100);
+    Gia_Man_t * pGiaBack;
+    Abc_Ntk_t * pNtk, * pNtkRes;
+
+    int input1 = Gia_ManAppendCi(giaMan);
+    int input2 = Gia_ManAppendCi(giaMan);
+    int input3 = Gia_ManAppendCi(giaMan);
+    int input4 = Gia_ManAppendCi(giaMan);
+
+    int aOut0 = Gia_ManAppendAnd(giaMan, input1, input2);
+    int aOut1 = Gia_ManAppendAnd(giaMan, aOut0, input3);
+    int aOut2 = Gia_ManAppendAnd(giaMan, aOut1, input4);
+    Gia_ManAppendCo(giaMan, aOut2);
+
+    // prepare the Ntk used for ABC operation
+    Aig_Man_t * pAig = Gia_ManToAig( giaMan, 0 );
+    pNtk = Abc_NtkFromAigPhase( pAig );
+    pNtk->pName = Extra_UtilStrsav(pAig->pName);
+    EXPECT_TRUE(Abc_NtkIsStrash(pNtk));
+    // Balance
+    EXPECT_EQ(Abc_NtkLevel(pNtk), 3);
+    pNtkRes = Abc_NtkBalance( pNtk, 0, 0, 1 );
+    EXPECT_EQ(Abc_NtkLevel(pNtkRes), 2);
+    Abc_FrameReplaceCurrentNetwork( pAbc, pNtkRes );
+
+    Aig_Man_t *pAigTemp = Abc_NtkToDar( Abc_FrameReadNtk(pAbc), 0, 1 );
+    pGiaBack = Gia_ManFromAig( pAig );
+    Aig_ManStop( pAigTemp );
+
+    Gia_Man_t * pMiter = Gia_ManMiter( giaMan, pGiaBack, 0, 1, 0, 0, 0 );
+    Cec_ParCec_t ParsCec, * pPars = &ParsCec;
+    Cec_ManCecSetDefaultParams( pPars );
+    EXPECT_TRUE(Cec_ManVerify( pMiter, pPars ) == 1);
+
+    Gia_ManStop(giaMan);
+    Aig_ManStop(pAig);
+    Abc_NtkDelete(pNtk);
+    Abc_Stop();
+}
 
 ABC_NAMESPACE_IMPL_END

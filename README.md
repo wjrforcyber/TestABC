@@ -31,17 +31,18 @@ This section will include all the tests and test suite. Current tests:
   Test  #5: GiaSingleOperation.Gia2Aig
   Test  #6: GiaSingleOperation.Aig2Gia
   Test  #7: GiaSingleOperation.Gia2AigForOpt
-  Test  #8: AigTest.ConstructAig
-  Test  #9: AigTest.StructureAnalysisAig
-  Test #10: AigTest.PhasesAig
-  Test #11: AigTest.IsMuxAig
-  Test #12: AigTest.SimulationAig
-  Test #13: AigTest.Simulation6InputsAig
-  Test #14: AigTest.ReadFromFileAig
-  Test #15: AigTest.DuplicateAig
-  Test #16: AigCutTest.CutTruthVarNumAig
+  Test  #8: GiaSingleOperation.Gia2AigForOptBack
+  Test  #9: AigTest.ConstructAig
+  Test #10: AigTest.StructureAnalysisAig
+  Test #11: AigTest.PhasesAig
+  Test #12: AigTest.IsMuxAig
+  Test #13: AigTest.SimulationAig
+  Test #14: AigTest.Simulation6InputsAig
+  Test #15: AigTest.ReadFromFileAig
+  Test #16: AigTest.DuplicateAig
+  Test #17: AigCutTest.CutTruthVarNumAig
 
-Total Tests: 16
+Total Tests: 17
 ```
 
 ### AIG
@@ -68,6 +69,7 @@ There's also an assert testing another interface detecting if the node is the co
 - `GiaSingleOperation, Gia2Aig` : `Gia` manager transform to `Aig` manager.
 - `GiaSingleOperation, Aig2Gia` : `Aig` manager transform to `Gia` manager with `&cec` interface verified.
 - `GiaSingleOperation, Gia2AigForOpt` : ABC9 to ABC for optimization. There's no direct manager in old rw/rf/b, so should be transformed to `Ntk` level. An example of balance is given here.
+- `GiaSingleOperation, Gia2AigForOptBack` : ABC9 to ABC for optimization. Then back to `Gia` manager. Omit as much high level structure as possible. An example with `balance` is shown here.
 
 
 ### Cuts
