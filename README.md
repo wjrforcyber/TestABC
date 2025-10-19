@@ -30,17 +30,18 @@ This section will include all the tests and test suite. Current tests:
   Test  #4: GiaTest.CanAddAnAndGate
   Test  #5: GiaSingleOperation.Gia2Aig
   Test  #6: GiaSingleOperation.Aig2Gia
-  Test  #7: AigTest.ConstructAig
-  Test  #8: AigTest.StructureAnalysisAig
-  Test  #9: AigTest.PhasesAig
-  Test #10: AigTest.IsMuxAig
-  Test #11: AigTest.SimulationAig
-  Test #12: AigTest.Simulation6InputsAig
-  Test #13: AigTest.ReadFromFileAig
-  Test #14: AigTest.DuplicateAig
-  Test #15: AigCutTest.CutTruthVarNumAig
+  Test  #7: GiaSingleOperation.Gia2AigForOpt
+  Test  #8: AigTest.ConstructAig
+  Test  #9: AigTest.StructureAnalysisAig
+  Test #10: AigTest.PhasesAig
+  Test #11: AigTest.IsMuxAig
+  Test #12: AigTest.SimulationAig
+  Test #13: AigTest.Simulation6InputsAig
+  Test #14: AigTest.ReadFromFileAig
+  Test #15: AigTest.DuplicateAig
+  Test #16: AigCutTest.CutTruthVarNumAig
 
-Total Tests: 15
+Total Tests: 16
 ```
 
 ### AIG
@@ -65,8 +66,9 @@ There's also an assert testing another interface detecting if the node is the co
 
 ### Gia
 - `GiaSingleOperation, Gia2Aig` : `Gia` manager transform to `Aig` manager.
-
 - `GiaSingleOperation, Aig2Gia` : `Aig` manager transform to `Gia` manager with `&cec` interface verified.
+- `GiaSingleOperation, Gia2AigForOpt` : ABC9 to ABC for optimization. There's no direct manager in old rw/rf/b, so should be transformed to `Ntk` level. An example of balance is given here.
+
 
 ### Cuts
 - `AigCutTest, CutTruthVarNumAig` : Testing the number of words needed to be allocated for a number of variables, node that in ABC, a word length is always considered as 32 bits.
