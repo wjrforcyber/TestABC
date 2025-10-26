@@ -41,8 +41,9 @@ This section will include all the tests and test suite. Current tests:
   Test #15: AigTest.ReadFromFileAig
   Test #16: AigTest.DuplicateAig
   Test #17: AigCutTest.CutTruthVarNumAig
+  Test #18: UtilTest.UtilPrint
 
-Total Tests: 17
+Total Tests: 18
 ```
 
 ### AIG
@@ -74,3 +75,8 @@ There's also an assert testing another interface detecting if the node is the co
 
 ### Cuts
 - `AigCutTest, CutTruthVarNumAig` : Testing the number of words needed to be allocated for a number of variables, node that in ABC, a word length is always considered as 32 bits.
+
+### Util
+- `UtilTest, UtilTruthHexPrint` : Showing how to print a truth table into a hex format.
+> [!CAUTION]
+> This interface has a minor issue: You should make sure that the truth `unsigned Sign[]` passed into the interface has absolute length equal or lower than the maximum length according to the `nVars`, if you pass `256` to `3` variable, you will get a `00` instead of `100`. The total number of digits is decided by the `nVars`.
