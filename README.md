@@ -40,10 +40,12 @@ This section will include all the tests and test suite. Current tests:
   Test #14: AigTest.Simulation6InputsAig
   Test #15: AigTest.ReadFromFileAig
   Test #16: AigTest.DuplicateAig
-  Test #17: AigCutTest.CutTruthVarNumAig
-  Test #18: UtilTest.UtilPrint
+  Test #17: AigTest.LevelTagAig
+  Test #18: AigTest.ReverseLevelAig
+  Test #19: AigCutTest.CutTruthVarNumAig
+  Test #20: UtilTest.UtilTruthHexPrint
 
-Total Tests: 18
+Total Tests: 20
 ```
 
 ### AIG
@@ -65,6 +67,14 @@ Total Tests: 18
     <img src="./resources/images/MuxDetection.png" width="150"/>
 </p>
 There's also an assert testing another interface detecting if the node is the control end of a MUX.
+
+- `AigTest, LevelTagAig` : Calculate level of each AND gate.
+> [!NOTE]
+> CI levels are 0.
+
+- `AigTest, ReverseLevelAig` : Reverse level calculation and could be used to further calculate the level slack.
+> [!NOTE]
+> `Abc_ObjRequiredLevel` should be called after `Abc_NtkStartReverseLevels`, or the reverse level `pNtk->vLevelsR` will be `NULL`.                                                          
 
 ### Gia
 - `GiaSingleOperation, Gia2Aig` : `Gia` manager transform to `Aig` manager.
