@@ -3,11 +3,6 @@
 #include "base/abc/abc.h"
 #include "misc/util/abc_namespaces.h"
 
-#include "gtest/gtest.h"
-
-#include "base/abc/abc.h"
-#include "misc/util/abc_namespaces.h"
-
 ABC_NAMESPACE_IMPL_START
 
 /*!
