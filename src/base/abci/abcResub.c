@@ -101,9 +101,9 @@ struct Abc_ManRes_t_
 };
 
 // external procedures
-static Abc_ManRes_t* Abc_ManResubStart( int nLeavesMax, int nDivsMax );
-static void          Abc_ManResubStop( Abc_ManRes_t * p );
-static Dec_Graph_t * Abc_ManResubEval( Abc_ManRes_t * p, Abc_Obj_t * pRoot, Vec_Ptr_t * vLeaves, int nSteps, int fUpdateLevel, int fVerbose );
+Abc_ManRes_t* Abc_ManResubStart( int nLeavesMax, int nDivsMax );
+void          Abc_ManResubStop( Abc_ManRes_t * p );
+Dec_Graph_t * Abc_ManResubEval( Abc_ManRes_t * p, Abc_Obj_t * pRoot, Vec_Ptr_t * vLeaves, int nSteps, int fUpdateLevel, int fVerbose );
 static void          Abc_ManResubCleanup( Abc_ManRes_t * p );
 static void          Abc_ManResubPrint( Abc_ManRes_t * p );
 

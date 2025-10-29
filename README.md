@@ -42,10 +42,12 @@ This section will include all the tests and test suite. Current tests:
   Test #16: AigTest.DuplicateAig
   Test #17: AigTest.LevelTagAig
   Test #18: AigTest.ReverseLevelAig
-  Test #19: AigCutTest.CutTruthVarNumAig
-  Test #20: UtilTest.UtilTruthHexPrint
+  Test #19: AigTest.ResubAig
+  Test #20: AigTest.ResubSingleNodeAig
+  Test #21: AigCutTest.CutTruthVarNumAig
+  Test #22: UtilTest.UtilTruthHexPrint
 
-Total Tests: 20
+Total Tests: 22
 ```
 
 ### AIG
@@ -74,7 +76,11 @@ There's also an assert testing another interface detecting if the node is the co
 
 - `AigTest, ReverseLevelAig` : Reverse level calculation and could be used to further calculate the level slack.
 > [!NOTE]
-> `Abc_ObjRequiredLevel` should be called after `Abc_NtkStartReverseLevels`, or the reverse level `pNtk->vLevelsR` will be `NULL`.                                                          
+> `Abc_ObjRequiredLevel` should be called after `Abc_NtkStartReverseLevels`, or the reverse level `pNtk->vLevelsR` will be `NULL`.
+
+- `AigTest, ResubAig` : Apply resubstitution to a network. This case is from Figure 3.2.2 from [paper](https://people.eecs.berkeley.edu/~alanmi/publications/2006/iwls06_sls.pdf).                                                          
+
+- `AigTest, ResubSingleNodeAig` : Apply resubstitution to a single node. Case is the same as mentioned above.
 
 ### Gia
 - `GiaSingleOperation, Gia2Aig` : `Gia` manager transform to `Aig` manager.
