@@ -21,6 +21,16 @@ cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug -B build
 cmake --build build
 ```
 
+You could trigger all tests by typing
+```bash
+cd build
+ctest --verbose --output-on-failure
+```
+Or trigger a single test by
+```bash
+ctest -R TEST_CASE_NAME --verbose
+```
+
 ## 🧪 Test list
 This section will include all the tests and test suite. Current tests:
 ```bash
