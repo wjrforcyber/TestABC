@@ -45,19 +45,21 @@ This section will include all the tests and test suite. Current tests:
   Test  #9: AigTest.ConstructAig
   Test #10: AigTest.StructureAnalysisAig
   Test #11: AigTest.PhasesAig
-  Test #12: AigTest.IsMuxAig
-  Test #13: AigTest.SimulationAig
-  Test #14: AigTest.Simulation6InputsAig
-  Test #15: AigTest.ReadFromFileAig
-  Test #16: AigTest.DuplicateAig
-  Test #17: AigTest.LevelTagAig
-  Test #18: AigTest.ReverseLevelAig
-  Test #19: AigTest.ResubAig
-  Test #20: AigTest.ResubSingleNodeAig
-  Test #21: AigCutTest.CutTruthVarNumAig
-  Test #22: UtilTest.UtilTruthHexPrint
+  Test #12: AigTest.NameObjAig
+  Test #13: AigTest.IsMuxAig
+  Test #14: AigTest.SimulationAig
+  Test #15: AigTest.Simulation6InputsAig
+  Test #16: AigTest.ReadFromFileAig
+  Test #17: AigTest.DuplicateAig
+  Test #18: AigTest.LevelTagAig
+  Test #19: AigTest.ReverseLevelAig
+  Test #20: AigTest.ResubAig
+  Test #21: AigTest.ResubSingleNodeAig
+  Test #22: AigCutTest.CutTruthVarNumAig
+  Test #23: AigCutTest.CutCollect
+  Test #24: UtilTest.UtilTruthHexPrint
 
-Total Tests: 22
+Total Tests: 24
 ```
 
 ### AIG
@@ -74,6 +76,7 @@ Total Tests: 22
     <img src="./resources/images/SimulationCase.png" width="250"/>
 </p>
 
+- `AigTest, NameObjAig` : Assign name to object in network.
 - `AigTest, IsMuxAig` : Detecting if the current node is the root of a MUX. It is detecting a two level AIG, check the inverted attribute of the **children and grand children**. The tested example is shown below:
 <p align="center">
     <img src="./resources/images/MuxDetection.png" width="150"/>
@@ -101,6 +104,7 @@ There's also an assert testing another interface detecting if the node is the co
 
 ### Cuts
 - `AigCutTest, CutTruthVarNumAig` : Testing the number of words needed to be allocated for a number of variables, node that in ABC, a word length is always considered as 32 bits.
+- `AigCutTest, CutCollect` : Collecting cuts on a single AND node. Use the example AIG case from `AigTest, Simulation6InputsAig`.
 
 ### Util
 - `UtilTest, UtilTruthHexPrint` : Showing how to print a truth table into a hex format.
