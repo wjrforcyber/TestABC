@@ -3,7 +3,27 @@
 #include "misc/util/abc_global.h"
 #include "misc/util/abc_namespaces.h"
 #include "misc/vec/vecPtr.h"
+#include "opt/cut/cut.h"
 #include "opt/cut/cutInt.h"
+
+#if defined(ABC_NAMESPACE)
+namespace ABC_NAMESPACE
+{
+#elif defined(__cplusplus)
+extern "C"
+{
+#endif
+
+Cut_Man_t * Abc_NtkCuts( Abc_Ntk_t * pNtk, Cut_Params_t * pParams );
+
+#if defined(ABC_NAMESPACE)
+}
+using namespace ABC_NAMESPACE;
+#elif defined(__cplusplus)
+}
+#endif
+
+
 
 ABC_NAMESPACE_IMPL_START
 
@@ -20,6 +40,88 @@ TEST(AigCutTest, CutTruthVarNumAig) {
     EXPECT_TRUE(n1 == 1); //    32/32
     EXPECT_TRUE(n4 == 2); //    64/32
     EXPECT_TRUE(n5 == 4); //    128/32
+}
+
+/*!
+ \brief Collecting cuts on a single node on a Ntk, a regular process.
+*/
+TEST(AigCutTest, CutCollect) {
+    Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    Cut_Man_t * pCutMan;
+    Cut_Cut_t * pCut;
+    int index = 0;
+
+    int nInputs = 6;
+    int nOutputs = 1;
+    int i = 0;
+    Abc_Obj_t * pObj;
+    // create the PIs
+    for ( i = 0; i < nInputs; i++ )
+    {
+        pObj = Abc_NtkCreatePi(pNtk);    
+    }
+    // create the POs
+    for ( i = 0; i < nOutputs; i++ )
+    {
+        pObj = Abc_NtkCreatePo(pNtk);   
+    }
+    Abc_Obj_t * pi00 = Abc_NtkPi(pNtk, 0);
+    Abc_ObjAssignName(pi00, "pi00", NULL);
+    Abc_Obj_t * pi01 = Abc_NtkPi(pNtk, 1);
+    Abc_ObjAssignName(pi01, "pi01", NULL);
+    Abc_Obj_t * pi02 = Abc_NtkPi(pNtk, 2);
+    Abc_ObjAssignName(pi02, "pi02", NULL);
+    Abc_Obj_t * pi03 = Abc_NtkPi(pNtk, 3);
+    Abc_ObjAssignName(pi03, "pi03", NULL);
+    Abc_Obj_t * pi04 = Abc_NtkPi(pNtk, 4);
+    Abc_ObjAssignName(pi04, "pi04", NULL);
+    Abc_Obj_t * pi05 = Abc_NtkPi(pNtk, 5);
+    Abc_ObjAssignName(pi05, "pi05", NULL);
+    Abc_Obj_t * pN2012 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi01), pi02);
+    Abc_ObjAssignName(pN2012, "n2012", NULL);
+    Abc_Obj_t * pN2013 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi00, Abc_ObjNot(pN2012));
+    Abc_ObjAssignName(pN2013, "n2013", NULL);
+    Abc_Obj_t * pN2011 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi04), pi05);
+    Abc_ObjAssignName(pN2011, "n2011", NULL);
+    Abc_Obj_t * pN2014 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi03), Abc_ObjNot(pN2011));
+    Abc_ObjAssignName(pN2014, "n2014", NULL);
+    Abc_Obj_t * pRoot = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pN2013), pN2014);
+    Abc_ObjAssignName(pRoot, "nRoot", NULL);
+    Abc_ObjAddFanin(Abc_NtkPo(pNtk, 0), Abc_ObjNot(pRoot));
+
+    Cut_Params_t Params, * pParams = &Params;
+    memset( pParams, 0, sizeof(Cut_Params_t) );
+    pParams->nVarsMax  = 4;     // the max cut size ("k" of the k-feasible cuts)
+    pParams->nKeepMax  = 250;   // the max number of cuts kept at a node
+    pParams->fTruth    = 1;     // compute truth tables
+    pParams->fFilter   = 1;     // filter dominated cuts
+    pParams->fSeq      = 0;     // compute sequential cuts
+    pParams->fDrop     = 0;     // drop cuts on the fly
+    pParams->fVerbose  = 0;     // the verbosiness flag
+    pParams->nIdsMax   = Abc_NtkObjNumMax( pNtk );
+
+    pCutMan = Cut_ManStart( pParams );
+    // set cuts for PIs
+    Abc_NtkForEachCi( pNtk, pObj, i )
+        if ( Abc_ObjFanoutNum(pObj) > 0 )
+            Cut_NodeSetTriv( pCutMan, pObj->Id );
+        
+    pCut = (Cut_Cut_t *)Abc_NodeGetCutsRecursive( pCutMan, pN2013, 0, 0 );
+    printf(" Node n2013 has leaves:\n");
+    for ( pCut = pCut->pNext; pCut; pCut = pCut->pNext )
+    {
+        printf("Cut %d:\n", index);
+        for ( i = 0; i < (int)pCut->nLeaves; i++ )
+        {
+            Abc_Obj_t * pFanin = Abc_NtkObj( pN2013->pNtk, pCut->pLeaves[i] );
+            printf("%d(%s) ", Abc_ObjId(pFanin), Abc_ObjName(pFanin));
+        }
+        printf("\n");
+        index++;
+    }
+    EXPECT_TRUE(index == 2);
+    Cut_ManStop(pCutMan);
+    Abc_NtkDelete(pNtk);
 }
 
 

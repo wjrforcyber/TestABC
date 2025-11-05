@@ -150,6 +150,44 @@ TEST(AigTest, PhasesAig) {
     EXPECT_TRUE(Abc_ObjFanin0(Abc_NtkPo(pNtk, 3))->fPhase == 1);
 }
 
+
+/*!
+ \brief Assign Name to an Object.
+*/
+TEST(AigTest, NameObjAig) {
+    Abc_Obj_t * pCi;
+    int i;
+    Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    Abc_Obj_t * pi0 = Abc_NtkCreatePi(pNtk);
+    Abc_Obj_t * pi1 = Abc_NtkCreatePi(pNtk);
+    Abc_Obj_t * pi2 = Abc_NtkCreatePi(pNtk);
+
+    Abc_Obj_t * po = Abc_NtkCreatePo(pNtk);
+    Abc_Obj_t * and0 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi0, pi1);
+    Abc_Obj_t * and1 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi0), pi2);
+    Abc_Obj_t * and2 = Abc_AigAnd((Abc_Aig_t * )pNtk->pManFunc, Abc_ObjNot(and0), Abc_ObjNot(and1));
+    Abc_ObjAddFanin( po, and2 );
+
+    Abc_NtkForEachCi(pNtk, pCi, i)
+    {
+        char index_i[10];
+        assert(i < 10);
+        snprintf(index_i, sizeof(index_i), "%d", i);
+        Abc_ObjAssignName(pCi, "pi", index_i);
+    }
+    Abc_ObjAssignName(and0, "and0", NULL);
+    Abc_ObjAssignName(and1, "and1", NULL);
+    Abc_ObjAssignName(and2, "and2", NULL);
+    EXPECT_TRUE(strcmp(Abc_ObjName(Abc_NtkCi(pNtk, 0)), "pi0") == 0);
+    EXPECT_TRUE(strcmp(Abc_ObjName(Abc_NtkCi(pNtk, 1)), "pi1") == 0);
+    EXPECT_TRUE(strcmp(Abc_ObjName(Abc_NtkCi(pNtk, 2)), "pi2") == 0);
+    EXPECT_TRUE(strcmp(Abc_ObjName(and0), "and0") == 0);
+    EXPECT_TRUE(strcmp(Abc_ObjName(and1), "and1") == 0);
+    EXPECT_TRUE(strcmp(Abc_ObjName(and2), "and2") == 0);
+    
+    Abc_NtkDelete(pNtk);
+}
+
 /*!
  \brief Check if the node is MUX output node
 */
