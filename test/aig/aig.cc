@@ -226,6 +226,34 @@ TEST(AigTest, IsMuxControlAig) {
 }
 
 /*!
+ \brief Recognize the ITE.
+*/
+TEST(AigTest, RecITEMUXAig) {
+    Abc_Obj_t * pDriver, * pNodeT, * pNodeE, * pNodeC;
+    Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    Abc_Obj_t * pi0 = Abc_NtkCreatePi(pNtk);
+    Abc_Obj_t * pi1 = Abc_NtkCreatePi(pNtk);
+    Abc_Obj_t * pi2 = Abc_NtkCreatePi(pNtk);
+
+    Abc_Obj_t * po = Abc_NtkCreatePo(pNtk);
+    Abc_Obj_t * and0 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi0, pi1);
+    Abc_Obj_t * and1 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi0), pi2);
+    Abc_Obj_t * and2 = Abc_AigAnd((Abc_Aig_t * )pNtk->pManFunc, Abc_ObjNot(and0), Abc_ObjNot(and1));
+    Abc_ObjAddFanin( po, and2 );
+    EXPECT_TRUE(Abc_NodeIsMuxType(and2));
+    pDriver = and2;
+    pNodeC = Abc_NodeRecognizeMux( pDriver, &pNodeT, &pNodeE );
+    EXPECT_EQ(pNodeC, pi0);
+    EXPECT_EQ(Abc_ObjRegular(pNodeT), pi1);
+    EXPECT_EQ(Abc_ObjRegular(pNodeE), pi2);
+    Abc_NtkDelete(pNtk);
+}
+
+
+
+
+
+/*!
  \brief Analysis simulation on different cases
 */
 TEST(AigTest, SimulationAig) {
