@@ -47,19 +47,20 @@ This section will include all the tests and test suite. Current tests:
   Test #11: AigTest.PhasesAig
   Test #12: AigTest.NameObjAig
   Test #13: AigTest.IsMuxAig
-  Test #14: AigTest.SimulationAig
-  Test #15: AigTest.Simulation6InputsAig
-  Test #16: AigTest.ReadFromFileAig
-  Test #17: AigTest.DuplicateAig
-  Test #18: AigTest.LevelTagAig
-  Test #19: AigTest.ReverseLevelAig
-  Test #20: AigTest.ResubAig
-  Test #21: AigTest.ResubSingleNodeAig
-  Test #22: AigCutTest.CutTruthVarNumAig
-  Test #23: AigCutTest.CutCollect
-  Test #24: UtilTest.UtilTruthHexPrint
+  Test #14: AigTest.IsMuxControlAig
+  Test #15: AigTest.SimulationAig
+  Test #16: AigTest.Simulation6InputsAig
+  Test #17: AigTest.ReadFromFileAig
+  Test #18: AigTest.DuplicateAig
+  Test #19: AigTest.LevelTagAig
+  Test #20: AigTest.ReverseLevelAig
+  Test #21: AigTest.ResubAig
+  Test #22: AigTest.ResubSingleNodeAig
+  Test #23: AigCutTest.CutTruthVarNumAig
+  Test #24: AigCutTest.CutCollect
+  Test #25: UtilTest.UtilTruthHexPrint
 
-Total Tests: 24
+Total Tests: 25
 ```
 
 ### AIG
@@ -81,7 +82,8 @@ Total Tests: 24
 <p align="center">
     <img src="./resources/images/MuxDetection.png" width="150"/>
 </p>
-There's also an assert testing another interface detecting if the node is the control end of a MUX.
+
+- `AigTest, IsMuxControlAig` : Check if the node is MUX control node type. This one uses the case in `AigTest, IsMuxAig`, the control node is the node $pi_0$.
 
 - `AigTest, LevelTagAig` : Calculate level of each AND gate.
 > [!NOTE]

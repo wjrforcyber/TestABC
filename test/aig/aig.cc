@@ -204,7 +204,24 @@ TEST(AigTest, IsMuxAig) {
     EXPECT_TRUE(and2->fPhase == 1);
     Abc_ObjAddFanin( po, and2 );
     EXPECT_TRUE(Abc_NodeIsMuxType(and2));
-    EXPECT_TRUE(pi0);
+    Abc_NtkDelete(pNtk);
+}
+
+/*!
+ \brief Check if the node is MUX control node
+*/
+TEST(AigTest, IsMuxControlAig) {
+    Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    Abc_Obj_t * pi0 = Abc_NtkCreatePi(pNtk);
+    Abc_Obj_t * pi1 = Abc_NtkCreatePi(pNtk);
+    Abc_Obj_t * pi2 = Abc_NtkCreatePi(pNtk);
+
+    Abc_Obj_t * po = Abc_NtkCreatePo(pNtk);
+    Abc_Obj_t * and0 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi0, pi1);
+    Abc_Obj_t * and1 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi0), pi2);
+    Abc_Obj_t * and2 = Abc_AigAnd((Abc_Aig_t * )pNtk->pManFunc, Abc_ObjNot(and0), Abc_ObjNot(and1));
+    Abc_ObjAddFanin( po, and2 );
+    EXPECT_TRUE(Abc_NodeIsMuxControlType(pi0));
     Abc_NtkDelete(pNtk);
 }
 
