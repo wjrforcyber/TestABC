@@ -48,19 +48,20 @@ This section will include all the tests and test suite. Current tests:
   Test #12: AigTest.NameObjAig
   Test #13: AigTest.IsMuxAig
   Test #14: AigTest.IsMuxControlAig
-  Test #15: AigTest.SimulationAig
-  Test #16: AigTest.Simulation6InputsAig
-  Test #17: AigTest.ReadFromFileAig
-  Test #18: AigTest.DuplicateAig
-  Test #19: AigTest.LevelTagAig
-  Test #20: AigTest.ReverseLevelAig
-  Test #21: AigTest.ResubAig
-  Test #22: AigTest.ResubSingleNodeAig
-  Test #23: AigCutTest.CutTruthVarNumAig
-  Test #24: AigCutTest.CutCollect
-  Test #25: UtilTest.UtilTruthHexPrint
+  Test #15: AigTest.RecITEMUXAig
+  Test #16: AigTest.SimulationAig
+  Test #17: AigTest.Simulation6InputsAig
+  Test #18: AigTest.ReadFromFileAig
+  Test #19: AigTest.DuplicateAig
+  Test #20: AigTest.LevelTagAig
+  Test #21: AigTest.ReverseLevelAig
+  Test #22: AigTest.ResubAig
+  Test #23: AigTest.ResubSingleNodeAig
+  Test #24: AigCutTest.CutTruthVarNumAig
+  Test #25: AigCutTest.CutCollect
+  Test #26: UtilTest.UtilTruthHexPrint
 
-Total Tests: 25
+Total Tests: 26
 ```
 
 ### AIG
@@ -84,6 +85,9 @@ Total Tests: 25
 </p>
 
 - `AigTest, IsMuxControlAig` : Check if the node is MUX control node type. This one uses the case in `AigTest, IsMuxAig`, the control node is the node $pi_0$.
+- `AigTest, RecITEMUXAig` : Recognize a MUX and return control("if") node, "then" node, "else" node based on IFE(if-then-else) logic.
+> [!NOTE]
+> The "then" and "else" nodes can be complemented.
 
 - `AigTest, LevelTagAig` : Calculate level of each AND gate.
 > [!NOTE]
