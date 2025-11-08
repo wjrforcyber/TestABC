@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 #include "base/abc/abc.h"
+#include "base/io/ioAbc.h"
 #include "misc/util/abc_global.h"
 #include "misc/util/abc_namespaces.h"
 #include "misc/vec/vecPtr.h"
@@ -15,6 +16,10 @@ extern "C"
 #endif
 
 Cut_Man_t * Abc_NtkCuts( Abc_Ntk_t * pNtk, Cut_Params_t * pParams );
+void Abc_Start();
+void Abc_Stop();
+typedef struct Abc_Frame_t_ Abc_Frame_t;
+Abc_Frame_t * Abc_FrameGetGlobalFrame();
 
 #if defined(ABC_NAMESPACE)
 }
@@ -110,7 +115,8 @@ TEST(AigCutTest, CutCollect) {
     printf(" Node n2013:\n");
     for ( pCut = pCut->pNext; pCut; pCut = pCut->pNext )
     {
-        printf("Cut %d:\n", index);
+        unsigned * pTruth = Cut_CutReadTruth(pCut);
+        printf("Cut %d:(0x%x)\n", index, *pTruth);
         for ( i = 0; i < (int)pCut->nLeaves; i++ )
         {
             Abc_Obj_t * pFanin = Abc_NtkObj( pN2013->pNtk, pCut->pLeaves[i] );
@@ -191,10 +197,12 @@ TEST(AigCutTest, CutLeavesSizeCollect) {
             Cut_NodeSetTriv( pCutMan, pObj->Id );
         
     pCut = (Cut_Cut_t *)Abc_NodeGetCutsRecursive( pCutMan, pRoot, 0, 0 );
+    EXPECT_TRUE(pCut->pLeaves[0] == pRoot->Id && pCut->nLeaves == 1);
     printf(" Node pRoot(LSIZEMAX = 4):\n");
     for ( pCut = pCut->pNext; pCut; pCut = pCut->pNext )
     {
-        printf("Cut %d:\n", index4);
+        unsigned * pTruth = Cut_CutReadTruth(pCut);
+        printf("Cut %d:(0x%x)\n", index4, *pTruth);
         for ( i = 0; i < (int)pCut->nLeaves; i++ )
         {
             Abc_Obj_t * pFanin = Abc_NtkObj( pRoot->pNtk, pCut->pLeaves[i] );
@@ -213,9 +221,11 @@ TEST(AigCutTest, CutLeavesSizeCollect) {
         if ( Abc_ObjFanoutNum(pObj) > 0 )
             Cut_NodeSetTriv( pCutMan, pObj->Id );
     pCut = (Cut_Cut_t *)Abc_NodeGetCutsRecursive( pCutMan, pRoot, 0, 0 );
+    EXPECT_TRUE(pCut->pLeaves[0] == pRoot->Id && pCut->nLeaves == 1);
     for ( pCut = pCut->pNext; pCut; pCut = pCut->pNext )
     {
-        printf("Cut %d:\n", index5);
+        unsigned * pTruth = Cut_CutReadTruth(pCut);
+        printf("Cut %d:(0x%x)\n", index5, *pTruth);
         for ( i = 0; i < (int)pCut->nLeaves; i++ )
         {
             Abc_Obj_t * pFanin = Abc_NtkObj( pRoot->pNtk, pCut->pLeaves[i] );
@@ -228,6 +238,46 @@ TEST(AigCutTest, CutLeavesSizeCollect) {
     EXPECT_TRUE(index5 > index4);
     Cut_ManStop(pCutMan);
     Abc_NtkDelete(pNtk);
+}
+
+/*!
+ \brief Collecting cuts on a single node on a Ntk, a regular process.
+*/
+TEST(AigCutTest, CutLeavesSizeCollectReal) {
+    Abc_Start();
+    Cut_Man_t * pCutMan;
+    Cut_Cut_t * pCut;
+    char * pFileName = (char *)malloc(sizeof(char) * 100);
+    strcat(pFileName, PROJECT_ROOT_DIR);
+    strcat(pFileName, "/i10.aig");
+    Abc_Ntk_t * pNtk = Io_Read( pFileName, IO_FILE_AIGER, 1, 0 );
+    
+    Abc_Obj_t * pNode, * pObj;
+    int i = 0;
+    
+    Cut_Params_t Params, * pParams = &Params;
+    memset( pParams, 0, sizeof(Cut_Params_t) );
+    pParams->nVarsMax  = 4;     // the max cut size ("k" of the k-feasible cuts)
+    pParams->nKeepMax  = 250;   // the max number of cuts kept at a node
+    pParams->fTruth    = 1;     // compute truth tables
+    pParams->fFilter   = 1;     // filter dominated cuts
+    pParams->fSeq      = 0;     // compute sequential cuts
+    pParams->fDrop     = 0;     // drop cuts on the fly
+    pParams->fVerbose  = 0;     // the verbosiness flag
+    pParams->nIdsMax   = Abc_NtkObjNumMax( pNtk );
+
+    pCutMan = Cut_ManStart( pParams );
+    // set cuts for PIs
+    Abc_NtkForEachCi( pNtk, pObj, i )
+        if ( Abc_ObjFanoutNum(pObj) > 0 )
+            Cut_NodeSetTriv( pCutMan, pObj->Id );
+    Abc_NtkForEachNode( pNtk, pNode, i ) {
+        pCut = (Cut_Cut_t *)Abc_NodeGetCutsRecursive( pCutMan, pNode, 0, 0 );
+        EXPECT_TRUE(pCut != NULL);
+    }
+    Cut_ManStop(pCutMan);
+    Abc_NtkDelete(pNtk);
+    Abc_Stop();
 }
 
 

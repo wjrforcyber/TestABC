@@ -60,9 +60,10 @@ This section will include all the tests and test suite. Current tests:
   Test #24: AigCutTest.CutTruthVarNumAig
   Test #25: AigCutTest.CutCollect
   Test #26: AigCutTest.CutLeavesSizeCollect
-  Test #27: UtilTest.UtilTruthHexPrint
+  Test #27: AigCutTest.CutLeavesSizeCollectReal
+  Test #28: UtilTest.UtilTruthHexPrint
 
-Total Tests: 27
+Total Tests: 28
 ```
 
 ### AIG
@@ -113,6 +114,9 @@ Total Tests: 27
 - `AigCutTest, CutTruthVarNumAig` : Testing the number of words needed to be allocated for a number of variables, node that in ABC, a word length is always considered as 32 bits.
 - `AigCutTest, CutCollect` : Collecting cuts on a single AND node. Use the example AIG case from `AigTest, Simulation6InputsAig`.
 - `AigCutTest, CutLeavesSizeCollect` : Check the cut set difference when modifying the cut max leaf size.
+> [!NOTE]
+> Trivial cut is always the first one, which only contain the node itself. You will see the check in this example.
+- `AigCutTest, CutLeavesSizeCollectReal` : Every node type should have cuts, even only a single trivial one.
 
 ### Util
 - `UtilTest, UtilTruthHexPrint` : Showing how to print a truth table into a hex format.
