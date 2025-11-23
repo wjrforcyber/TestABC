@@ -49,21 +49,22 @@ This section will include all the tests and test suite. Current tests:
   Test #13: AigTest.IsMuxAig
   Test #14: AigTest.IsMuxControlAig
   Test #15: AigTest.RecITEMUXAig
-  Test #16: AigTest.SimulationAig
-  Test #17: AigTest.Simulation6InputsAig
-  Test #18: AigTest.ReadFromFileAig
-  Test #19: AigTest.DuplicateAig
-  Test #20: AigTest.LevelTagAig
-  Test #21: AigTest.ReverseLevelAig
-  Test #22: AigTest.ResubAig
-  Test #23: AigTest.ResubSingleNodeAig
-  Test #24: AigCutTest.CutTruthVarNumAig
-  Test #25: AigCutTest.CutCollect
-  Test #26: AigCutTest.CutLeavesSizeCollect
-  Test #27: AigCutTest.CutLeavesSizeCollectReal
-  Test #28: UtilTest.UtilTruthHexPrint
+  Test #16: AigTest.IsXORAig
+  Test #17: AigTest.SimulationAig
+  Test #18: AigTest.Simulation6InputsAig
+  Test #19: AigTest.ReadFromFileAig
+  Test #20: AigTest.DuplicateAig
+  Test #21: AigTest.LevelTagAig
+  Test #22: AigTest.ReverseLevelAig
+  Test #23: AigTest.ResubAig
+  Test #24: AigTest.ResubSingleNodeAig
+  Test #25: AigCutTest.CutTruthVarNumAig
+  Test #26: AigCutTest.CutCollect
+  Test #27: AigCutTest.CutLeavesSizeCollect
+  Test #28: AigCutTest.CutLeavesSizeCollectReal
+  Test #29: UtilTest.UtilTruthHexPrint
 
-Total Tests: 28
+Total Tests: 29
 ```
 
 ### AIG
@@ -90,6 +91,14 @@ Total Tests: 28
 - `AigTest, RecITEMUXAig` : Recognize a MUX and return control("if") node, "then" node, "else" node based on IFE(if-then-else) logic.
 > [!NOTE]
 > The "then" and "else" nodes can be complemented.
+
+- `AigTest, IsXORAig` : Check if a root node is a XOR/NXOR root node. Since the phase of the root can be changed easily, actually this interface will return true on the following 4 different cases.
+> [!NOTE]
+> $(a)$ and $(b)$ are XOR and $(c)$ and $(d)$ are NXOR.
+
+<p align="center">
+    <img src="./resources/images/xor.png" width="600"/>
+</p>
 
 - `AigTest, LevelTagAig` : Calculate level of each AND gate.
 > [!NOTE]
