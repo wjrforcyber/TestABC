@@ -249,7 +249,62 @@ TEST(AigTest, RecITEMUXAig) {
     Abc_NtkDelete(pNtk);
 }
 
+/*!
+ \brief Check if the node is XOR root node
+*/
+TEST(AigTest, IsXORAig) {
+    //case a
+    Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    Abc_Obj_t * pi0 = Abc_NtkCreatePi(pNtk);
+    Abc_Obj_t * pi1 = Abc_NtkCreatePi(pNtk);
 
+    Abc_Obj_t * po = Abc_NtkCreatePo(pNtk);
+    Abc_Obj_t * and0 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi0, pi1);
+    Abc_Obj_t * and1 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi0), Abc_ObjNot(pi1));
+    Abc_Obj_t * andOut = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(and0),Abc_ObjNot(and1));
+    Abc_ObjAddFanin(po, andOut);
+    EXPECT_TRUE(Abc_NodeIsExorType(andOut));
+    Abc_NtkDelete(pNtk);
+    
+    //case b
+    Abc_Ntk_t * pNtk1 = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    Abc_Obj_t * pi01 = Abc_NtkCreatePi(pNtk1);
+    Abc_Obj_t * pi11 = Abc_NtkCreatePi(pNtk1);
+
+    Abc_Obj_t * po1 = Abc_NtkCreatePo(pNtk1);
+    Abc_Obj_t * and01 = Abc_AigAnd((Abc_Aig_t *)pNtk1->pManFunc, Abc_ObjNot(pi01), Abc_ObjNot(pi11));
+    Abc_Obj_t * and11 = Abc_AigAnd((Abc_Aig_t *)pNtk1->pManFunc, pi01, pi11);
+    Abc_Obj_t * andOut1 = Abc_AigAnd((Abc_Aig_t *)pNtk1->pManFunc, Abc_ObjNot(and01),Abc_ObjNot(and11));
+    Abc_ObjAddFanin(po1, andOut1);
+    EXPECT_TRUE(Abc_NodeIsExorType(andOut1));
+    Abc_NtkDelete(pNtk1);
+    
+    //case c
+    Abc_Ntk_t * pNtk2 = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    Abc_Obj_t * pi02 = Abc_NtkCreatePi(pNtk2);
+    Abc_Obj_t * pi12 = Abc_NtkCreatePi(pNtk2);
+
+    Abc_Obj_t * po2 = Abc_NtkCreatePo(pNtk2);
+    Abc_Obj_t * and02 = Abc_AigAnd((Abc_Aig_t *)pNtk2->pManFunc, pi02, Abc_ObjNot(pi12));
+    Abc_Obj_t * and12 = Abc_AigAnd((Abc_Aig_t *)pNtk2->pManFunc, Abc_ObjNot(pi02), pi12);
+    Abc_Obj_t * andOut2 = Abc_AigAnd((Abc_Aig_t *)pNtk2->pManFunc, Abc_ObjNot(and02),Abc_ObjNot(and12));
+    Abc_ObjAddFanin(po2, andOut2);
+    EXPECT_TRUE(Abc_NodeIsExorType(andOut2));
+    Abc_NtkDelete(pNtk2);
+    
+    //case d
+    Abc_Ntk_t * pNtk3 = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    Abc_Obj_t * pi03 = Abc_NtkCreatePi(pNtk3);
+    Abc_Obj_t * pi13 = Abc_NtkCreatePi(pNtk3);
+
+    Abc_Obj_t * po3 = Abc_NtkCreatePo(pNtk3);
+    Abc_Obj_t * and03 = Abc_AigAnd((Abc_Aig_t *)pNtk3->pManFunc, Abc_ObjNot(pi03), pi13);
+    Abc_Obj_t * and13 = Abc_AigAnd((Abc_Aig_t *)pNtk3->pManFunc, pi03, Abc_ObjNot(pi13));
+    Abc_Obj_t * andOut3 = Abc_AigAnd((Abc_Aig_t *)pNtk3->pManFunc, Abc_ObjNot(and03),Abc_ObjNot(and13));
+    Abc_ObjAddFanin(po3, andOut3);
+    EXPECT_TRUE(Abc_NodeIsExorType(andOut3));
+    Abc_NtkDelete(pNtk3);
+}
 
 
 
