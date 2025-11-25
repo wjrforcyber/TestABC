@@ -34,38 +34,46 @@ ctest -R TEST_CASE_NAME --verbose
 ## 🧪 Test list
 This section will include all the tests and test suite. Current tests:
 ```bash
-  Test  #1: GiaTest.CanAllocateGiaManager
-  Test  #2: GiaTest.CanAddACi
-  Test  #3: GiaTest.CanAddACo
-  Test  #4: GiaTest.CanAddAnAndGate
-  Test  #5: GiaSingleOperation.Gia2Aig
-  Test  #6: GiaSingleOperation.Aig2Gia
-  Test  #7: GiaSingleOperation.Gia2AigForOpt
-  Test  #8: GiaSingleOperation.Gia2AigForOptBack
-  Test  #9: AigTest.ConstructAig
-  Test #10: AigTest.StructureAnalysisAig
-  Test #11: AigTest.PhasesAig
-  Test #12: AigTest.NameObjAig
-  Test #13: AigTest.IsMuxAig
-  Test #14: AigTest.IsMuxControlAig
-  Test #15: AigTest.RecITEMUXAig
-  Test #16: AigTest.IsXORAig
-  Test #17: AigTest.SimulationAig
-  Test #18: AigTest.Simulation6InputsAig
-  Test #19: AigTest.ReadFromFileAig
-  Test #20: AigTest.DuplicateAig
-  Test #21: AigTest.LevelTagAig
-  Test #22: AigTest.ReverseLevelAig
-  Test #23: AigTest.ResubAig
-  Test #24: AigTest.ResubSingleNodeAig
-  Test #25: AigCutTest.CutTruthVarNumAig
-  Test #26: AigCutTest.CutCollect
-  Test #27: AigCutTest.CutLeavesSizeCollect
-  Test #28: AigCutTest.CutLeavesSizeCollectReal
-  Test #29: UtilTest.UtilTruthHexPrint
+  Test  #1: TTTest.ReadTT
+  Test  #2: GiaTest.CanAllocateGiaManager
+  Test  #3: GiaTest.CanAddACi
+  Test  #4: GiaTest.CanAddACo
+  Test  #5: GiaTest.CanAddAnAndGate
+  Test  #6: GiaSingleOperation.Gia2Aig
+  Test  #7: GiaSingleOperation.Aig2Gia
+  Test  #8: GiaSingleOperation.Gia2AigForOpt
+  Test  #9: GiaSingleOperation.Gia2AigForOptBack
+  Test #10: AigTest.ConstructAig
+  Test #11: AigTest.StructureAnalysisAig
+  Test #12: AigTest.PhasesAig
+  Test #13: AigTest.NameObjAig
+  Test #14: AigTest.IsMuxAig
+  Test #15: AigTest.IsMuxControlAig
+  Test #16: AigTest.RecITEMUXAig
+  Test #17: AigTest.IsXORAig
+  Test #18: AigTest.SimulationAig
+  Test #19: AigTest.Simulation6InputsAig
+  Test #20: AigTest.ReadFromFileAig
+  Test #21: AigTest.DuplicateAig
+  Test #22: AigTest.LevelTagAig
+  Test #23: AigTest.ReverseLevelAig
+  Test #24: AigTest.ResubAig
+  Test #25: AigTest.ResubSingleNodeAig
+  Test #26: AigCutTest.CutTruthVarNumAig
+  Test #27: AigCutTest.CutCollect
+  Test #28: AigCutTest.CutLeavesSizeCollect
+  Test #29: AigCutTest.CutLeavesSizeCollectReal
+  Test #30: UtilTest.UtilTruthHexPrint
 
-Total Tests: 29
+Total Tests: 30
 ```
+
+### Truth table
+- `TTTest, ReadTT` : Show the direct interface on reading truth table into abc.
+  1. Check for case.
+  2. Check for ignoring leading `0x`.
+  3. Check for MSB(order).
+  4. Check for returned number of variables.
 
 ### AIG
 - `AigTest, ConstructAig` : Construct a 2 input and 1 output AIG(A single AND node).
