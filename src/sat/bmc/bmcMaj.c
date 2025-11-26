@@ -62,6 +62,8 @@ struct Maj_Man_t_
 
 static inline word *  Maj_ManTruth( Maj_Man_t * p, int v ) { return Vec_WrdEntryP( p->vInfo, p->nWords * v ); }
 
+int Exa7_AddClause( FILE * pFile, int * pLits, int nLits );
+
 ////////////////////////////////////////////////////////////////////////
 ///                     FUNCTION DEFINITIONS                         ///
 ////////////////////////////////////////////////////////////////////////
@@ -4075,7 +4077,7 @@ void Exa_ManExactSynthesis6( Bmc_EsPar_t * pPars, char * pFileName )
   SeeAlso     []
 
 ***********************************************************************/
-static inline int Exa7_AddClause( FILE * pFile, int * pLits, int nLits )
+int Exa7_AddClause( FILE * pFile, int * pLits, int nLits )
 {
     int i, k = 0;
     for ( i = 0; i < nLits; i++ ) {
@@ -4102,6 +4104,7 @@ static inline int Exa7_AddClause( FILE * pFile, int * pLits, int nLits )
     }
     return 1;
 }
+
 static inline int Exa7_AddClause4( FILE * pFile, int Lit0, int Lit1, int Lit2, int Lit3 )
 {
     int pLits[4] = { Lit0, Lit1, Lit2, Lit3 };
