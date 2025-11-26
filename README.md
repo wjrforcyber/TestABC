@@ -64,8 +64,9 @@ This section will include all the tests and test suite. Current tests:
   Test #28: AigCutTest.CutLeavesSizeCollect
   Test #29: AigCutTest.CutLeavesSizeCollectReal
   Test #30: UtilTest.UtilTruthHexPrint
+  Test #31: UtilTest.UtilAddClauses
 
-Total Tests: 30
+Total Tests: 31
 ```
 
 ### Truth table
@@ -139,3 +140,5 @@ Total Tests: 30
 - `UtilTest, UtilTruthHexPrint` : Showing how to print a truth table into a hex format.
 > [!CAUTION]
 > This interface has a minor issue: You should make sure that the truth `unsigned Sign[]` passed into the interface has absolute length equal or lower than the maximum length according to the `nVars`, if you pass `256` to `3` variable, you will get a `00` instead of `100`. The total number of digits is decided by the `nVars`.
+
+- `UtilTest, UtilAddClauses` : Clause interface, give example to show what it looks like, the lits are based on AIG syntax, variables are index based(roughly divided by 2, positive or negative decided by even/odd lit).
