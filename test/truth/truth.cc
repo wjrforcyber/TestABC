@@ -2,6 +2,7 @@
 #include "misc/util/abc_global.h"
 #include "misc/util/utilTruth.h"
 #include "gtest/gtest.h"
+#include <cmath>
 #include <cstdlib>
 ABC_NAMESPACE_IMPL_START
 
@@ -43,6 +44,20 @@ TEST(TTTest, ReadTT) {
     free(pTruth2);
     free(pTruth3);
     free(pTruth4);
+}
+
+/*!
+  \brief Get the word number that needed for a specified number of variables.
+*/
+TEST(TTest, GetWordNum) {
+    int wordNum = Abc_TtWordNum(3);
+    EXPECT_EQ(wordNum, 1);
+    int wordNum7 = Abc_TtWordNum(7);
+    EXPECT_EQ(wordNum7, 2);
+    int wordNum8 = Abc_TtWordNum(8);
+    EXPECT_EQ(wordNum8, 4);
+    int wordNum16 = Abc_TtWordNum(16);
+    EXPECT_EQ(wordNum16, (int)pow(2, 10));
 }
 
 /*!

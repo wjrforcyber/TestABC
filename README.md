@@ -35,39 +35,40 @@ ctest -R TEST_CASE_NAME --verbose
 This section will include all the tests and test suite. Current tests:
 ```bash
   Test  #1: TTTest.ReadTT
-  Test  #2: TTest.GetBitTT
-  Test  #3: GiaTest.CanAllocateGiaManager
-  Test  #4: GiaTest.CanAddACi
-  Test  #5: GiaTest.CanAddACo
-  Test  #6: GiaTest.CanAddAnAndGate
-  Test  #7: GiaSingleOperation.Gia2Aig
-  Test  #8: GiaSingleOperation.Aig2Gia
-  Test  #9: GiaSingleOperation.Gia2AigForOpt
-  Test #10: GiaSingleOperation.Gia2AigForOptBack
-  Test #11: AigTest.ConstructAig
-  Test #12: AigTest.StructureAnalysisAig
-  Test #13: AigTest.PhasesAig
-  Test #14: AigTest.NameObjAig
-  Test #15: AigTest.IsMuxAig
-  Test #16: AigTest.IsMuxControlAig
-  Test #17: AigTest.RecITEMUXAig
-  Test #18: AigTest.IsXORAig
-  Test #19: AigTest.SimulationAig
-  Test #20: AigTest.Simulation6InputsAig
-  Test #21: AigTest.ReadFromFileAig
-  Test #22: AigTest.DuplicateAig
-  Test #23: AigTest.LevelTagAig
-  Test #24: AigTest.ReverseLevelAig
-  Test #25: AigTest.ResubAig
-  Test #26: AigTest.ResubSingleNodeAig
-  Test #27: AigCutTest.CutTruthVarNumAig
-  Test #28: AigCutTest.CutCollect
-  Test #29: AigCutTest.CutLeavesSizeCollect
-  Test #30: AigCutTest.CutLeavesSizeCollectReal
-  Test #31: UtilTest.UtilTruthHexPrint
-  Test #32: UtilTest.UtilAddClauses
+  Test  #2: TTest.GetWordNum
+  Test  #3: TTest.GetBitTT
+  Test  #4: GiaTest.CanAllocateGiaManager
+  Test  #5: GiaTest.CanAddACi
+  Test  #6: GiaTest.CanAddACo
+  Test  #7: GiaTest.CanAddAnAndGate
+  Test  #8: GiaSingleOperation.Gia2Aig
+  Test  #9: GiaSingleOperation.Aig2Gia
+  Test #10: GiaSingleOperation.Gia2AigForOpt
+  Test #11: GiaSingleOperation.Gia2AigForOptBack
+  Test #12: AigTest.ConstructAig
+  Test #13: AigTest.StructureAnalysisAig
+  Test #14: AigTest.PhasesAig
+  Test #15: AigTest.NameObjAig
+  Test #16: AigTest.IsMuxAig
+  Test #17: AigTest.IsMuxControlAig
+  Test #18: AigTest.RecITEMUXAig
+  Test #19: AigTest.IsXORAig
+  Test #20: AigTest.SimulationAig
+  Test #21: AigTest.Simulation6InputsAig
+  Test #22: AigTest.ReadFromFileAig
+  Test #23: AigTest.DuplicateAig
+  Test #24: AigTest.LevelTagAig
+  Test #25: AigTest.ReverseLevelAig
+  Test #26: AigTest.ResubAig
+  Test #27: AigTest.ResubSingleNodeAig
+  Test #28: AigCutTest.CutTruthVarNumAig
+  Test #29: AigCutTest.CutCollect
+  Test #30: AigCutTest.CutLeavesSizeCollect
+  Test #31: AigCutTest.CutLeavesSizeCollectReal
+  Test #32: UtilTest.UtilTruthHexPrint
+  Test #33: UtilTest.UtilAddClauses
 
-Total Tests: 32
+Total Tests: 33
 ```
 
 ### Truth table
@@ -76,6 +77,8 @@ Total Tests: 32
   2. Check for ignoring leading `0x`.
   3. Check for MSB(order).
   4. Check for returned number of variables.
+
+- `TTest, GetWordNum` : Get the required number of (`unsigned long`)words given a specified number of variables.
 
 - `TTest, GetBitTT` : Show the `k`(indexed) bit of a (unsigned long) word array.
 This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` means the modulo operation `k % 64`. So it first **shifts** to the target word and then **shifts** to the moduloed bit in the target word, and then extract it by `& 1`.
