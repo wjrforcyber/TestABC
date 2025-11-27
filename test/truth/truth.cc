@@ -45,4 +45,22 @@ TEST(TTTest, ReadTT) {
     free(pTruth4);
 }
 
+/*!
+  \brief Get a bit from an array of word. (bit level)
+*/
+TEST(TTest, GetBitTT) {
+    word w[] = {0x1,0x2,0x3};
+    // k could start with 0
+    int extBit0 = Abc_TtGetBit(w, 0);
+    EXPECT_EQ(extBit0, 1);
+    // the 1st bit of 0x3
+    int extBit128 = Abc_TtGetBit( w, 128 );
+    EXPECT_EQ(extBit128, 1);
+    // the 2nd bit of 0x3
+    int extBit129 = Abc_TtGetBit( w, 129 );
+    EXPECT_EQ(extBit129, 1);
+    int extBit1 = Abc_TtGetBit( w, 130 );
+    EXPECT_EQ(extBit1, 0);
+}
+
 ABC_NAMESPACE_IMPL_END
