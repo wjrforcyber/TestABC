@@ -35,40 +35,41 @@ ctest -R TEST_CASE_NAME --verbose
 This section will include all the tests and test suite. Current tests:
 ```bash
   Test  #1: TTTest.ReadTT
-  Test  #2: TTest.GetWordNum
-  Test  #3: TTest.GetBitTT
-  Test  #4: GiaTest.CanAllocateGiaManager
-  Test  #5: GiaTest.CanAddACi
-  Test  #6: GiaTest.CanAddACo
-  Test  #7: GiaTest.CanAddAnAndGate
-  Test  #8: GiaSingleOperation.Gia2Aig
-  Test  #9: GiaSingleOperation.Aig2Gia
-  Test #10: GiaSingleOperation.Gia2AigForOpt
-  Test #11: GiaSingleOperation.Gia2AigForOptBack
-  Test #12: AigTest.ConstructAig
-  Test #13: AigTest.StructureAnalysisAig
-  Test #14: AigTest.PhasesAig
-  Test #15: AigTest.NameObjAig
-  Test #16: AigTest.IsMuxAig
-  Test #17: AigTest.IsMuxControlAig
-  Test #18: AigTest.RecITEMUXAig
-  Test #19: AigTest.IsXORAig
-  Test #20: AigTest.SimulationAig
-  Test #21: AigTest.Simulation6InputsAig
-  Test #22: AigTest.ReadFromFileAig
-  Test #23: AigTest.DuplicateAig
-  Test #24: AigTest.LevelTagAig
-  Test #25: AigTest.ReverseLevelAig
-  Test #26: AigTest.ResubAig
-  Test #27: AigTest.ResubSingleNodeAig
-  Test #28: AigCutTest.CutTruthVarNumAig
-  Test #29: AigCutTest.CutCollect
-  Test #30: AigCutTest.CutLeavesSizeCollect
-  Test #31: AigCutTest.CutLeavesSizeCollectReal
-  Test #32: UtilTest.UtilTruthHexPrint
-  Test #33: UtilTest.UtilAddClauses
+  Test  #2: TTest.InvertWordTT
+  Test  #3: TTest.GetWordNum
+  Test  #4: TTest.GetBitTT
+  Test  #5: GiaTest.CanAllocateGiaManager
+  Test  #6: GiaTest.CanAddACi
+  Test  #7: GiaTest.CanAddACo
+  Test  #8: GiaTest.CanAddAnAndGate
+  Test  #9: GiaSingleOperation.Gia2Aig
+  Test #10: GiaSingleOperation.Aig2Gia
+  Test #11: GiaSingleOperation.Gia2AigForOpt
+  Test #12: GiaSingleOperation.Gia2AigForOptBack
+  Test #13: AigTest.ConstructAig
+  Test #14: AigTest.StructureAnalysisAig
+  Test #15: AigTest.PhasesAig
+  Test #16: AigTest.NameObjAig
+  Test #17: AigTest.IsMuxAig
+  Test #18: AigTest.IsMuxControlAig
+  Test #19: AigTest.RecITEMUXAig
+  Test #20: AigTest.IsXORAig
+  Test #21: AigTest.SimulationAig
+  Test #22: AigTest.Simulation6InputsAig
+  Test #23: AigTest.ReadFromFileAig
+  Test #24: AigTest.DuplicateAig
+  Test #25: AigTest.LevelTagAig
+  Test #26: AigTest.ReverseLevelAig
+  Test #27: AigTest.ResubAig
+  Test #28: AigTest.ResubSingleNodeAig
+  Test #29: AigCutTest.CutTruthVarNumAig
+  Test #30: AigCutTest.CutCollect
+  Test #31: AigCutTest.CutLeavesSizeCollect
+  Test #32: AigCutTest.CutLeavesSizeCollectReal
+  Test #33: UtilTest.UtilTruthHexPrint
+  Test #34: UtilTest.UtilAddClauses
 
-Total Tests: 33
+Total Tests: 34
 ```
 
 ### Truth table
@@ -77,6 +78,8 @@ Total Tests: 33
   2. Check for ignoring leading `0x`.
   3. Check for MSB(order).
   4. Check for returned number of variables.
+  
+- `TTest, InvertWordTT` : Get the inverted truth table of specified number of words.
 
 - `TTest, GetWordNum` : Get the required number of (`unsigned long`)words given a specified number of variables.
 
