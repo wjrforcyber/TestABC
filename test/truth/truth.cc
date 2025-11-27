@@ -47,6 +47,22 @@ TEST(TTTest, ReadTT) {
 }
 
 /*!
+  \brief Get the inverted truth table of specified number of words.
+*/
+TEST(TTest, InvertWordTT) {
+    word w[] = {0x1, 0x2, 0x3};
+    Abc_TtNot( w, 2 );
+    EXPECT_EQ(w[0], 0xFFFFFFFFFFFFFFFE);
+    EXPECT_EQ(w[1], 0xFFFFFFFFFFFFFFFD);
+    EXPECT_EQ(w[2], 0x3);
+    word wAll[] = {0x1, 0x2, 0x3};
+    Abc_TtNot( wAll, 3 );
+    EXPECT_EQ(wAll[0], 0xFFFFFFFFFFFFFFFE);
+    EXPECT_EQ(wAll[1], 0xFFFFFFFFFFFFFFFD);
+    EXPECT_EQ(wAll[2], 0xFFFFFFFFFFFFFFFC);
+}
+
+/*!
   \brief Get the word number that needed for a specified number of variables.
 */
 TEST(TTest, GetWordNum) {
