@@ -55,21 +55,22 @@ This section will include all the tests and test suite. Current tests:
   Test #19: AigTest.RecITEMUXAig
   Test #20: AigTest.IsXORAig
   Test #21: AigTest.SimulationAig
-  Test #22: AigTest.Simulation6InputsAig
-  Test #23: AigTest.ReadFromFileAig
-  Test #24: AigTest.DuplicateAig
-  Test #25: AigTest.LevelTagAig
-  Test #26: AigTest.ReverseLevelAig
-  Test #27: AigTest.ResubAig
-  Test #28: AigTest.ResubSingleNodeAig
-  Test #29: AigCutTest.CutTruthVarNumAig
-  Test #30: AigCutTest.CutCollect
-  Test #31: AigCutTest.CutLeavesSizeCollect
-  Test #32: AigCutTest.CutLeavesSizeCollectReal
-  Test #33: UtilTest.UtilTruthHexPrint
-  Test #34: UtilTest.UtilAddClauses
+  Test #22: AigTest.SimulationManualCompAig
+  Test #23: AigTest.Simulation6InputsAig
+  Test #24: AigTest.ReadFromFileAig
+  Test #25: AigTest.DuplicateAig
+  Test #26: AigTest.LevelTagAig
+  Test #27: AigTest.ReverseLevelAig
+  Test #28: AigTest.ResubAig
+  Test #29: AigTest.ResubSingleNodeAig
+  Test #30: AigCutTest.CutTruthVarNumAig
+  Test #31: AigCutTest.CutCollect
+  Test #32: AigCutTest.CutLeavesSizeCollect
+  Test #33: AigCutTest.CutLeavesSizeCollectReal
+  Test #34: UtilTest.UtilTruthHexPrint
+  Test #35: UtilTest.UtilAddClauses
 
-Total Tests: 34
+Total Tests: 35
 ```
 
 ### Truth table
@@ -99,6 +100,7 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 </p>
 
 - `AigTest, SimulationAig` : Simulation on every condition of a 2 input AND gate. It shows a way isolated from `resub` to perform an exact simulation.
+- `AigTest, SimulationManualCompAig` : Showcase on analyzing simulation on same structure cases with manually changed complemented attributes.
 - `AigTest, Simulation6InputsAig` : Give a detailed analysis on a 6-input window from a case i10.aig. Show the exact simulation result in some internal nodes. Check this example to get a deep comprehension about the phases and node encoding process. The window is structured as below:
 <p align="center">
     <img src="./resources/images/SimulationCase.png" width="250"/>
