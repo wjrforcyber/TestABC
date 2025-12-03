@@ -42,35 +42,36 @@ This section will include all the tests and test suite. Current tests:
   Test  #6: GiaTest.CanAddACi
   Test  #7: GiaTest.CanAddACo
   Test  #8: GiaTest.CanAddAnAndGate
-  Test  #9: GiaSingleOperation.Gia2Aig
-  Test #10: GiaSingleOperation.Aig2Gia
-  Test #11: GiaSingleOperation.Gia2AigForOpt
-  Test #12: GiaSingleOperation.Gia2AigForOptBack
-  Test #13: AigTest.ConstructAig
-  Test #14: AigTest.StructureAnalysisAig
-  Test #15: AigTest.PhasesAig
-  Test #16: AigTest.NameObjAig
-  Test #17: AigTest.IsMuxAig
-  Test #18: AigTest.IsMuxControlAig
-  Test #19: AigTest.RecITEMUXAig
-  Test #20: AigTest.IsXORAig
-  Test #21: AigTest.SimulationAig
-  Test #22: AigTest.SimulationManualCompAig
-  Test #23: AigTest.Simulation6InputsAig
-  Test #24: AigTest.ReadFromFileAig
-  Test #25: AigTest.DuplicateAig
-  Test #26: AigTest.LevelTagAig
-  Test #27: AigTest.ReverseLevelAig
-  Test #28: AigTest.ResubAig
-  Test #29: AigTest.ResubSingleNodeAig
-  Test #30: AigCutTest.CutTruthVarNumAig
-  Test #31: AigCutTest.CutCollect
-  Test #32: AigCutTest.CutLeavesSizeCollect
-  Test #33: AigCutTest.CutLeavesSizeCollectReal
-  Test #34: UtilTest.UtilTruthHexPrint
-  Test #35: UtilTest.UtilAddClauses
+  Test  #9: GiaTest.GiaCollectFanoutInfo
+  Test #10: GiaSingleOperation.Gia2Aig
+  Test #11: GiaSingleOperation.Aig2Gia
+  Test #12: GiaSingleOperation.Gia2AigForOpt
+  Test #13: GiaSingleOperation.Gia2AigForOptBack
+  Test #14: AigTest.ConstructAig
+  Test #15: AigTest.StructureAnalysisAig
+  Test #16: AigTest.PhasesAig
+  Test #17: AigTest.NameObjAig
+  Test #18: AigTest.IsMuxAig
+  Test #19: AigTest.IsMuxControlAig
+  Test #20: AigTest.RecITEMUXAig
+  Test #21: AigTest.IsXORAig
+  Test #22: AigTest.SimulationAig
+  Test #23: AigTest.SimulationManualCompAig
+  Test #24: AigTest.Simulation6InputsAig
+  Test #25: AigTest.ReadFromFileAig
+  Test #26: AigTest.DuplicateAig
+  Test #27: AigTest.LevelTagAig
+  Test #28: AigTest.ReverseLevelAig
+  Test #29: AigTest.ResubAig
+  Test #30: AigTest.ResubSingleNodeAig
+  Test #31: AigCutTest.CutTruthVarNumAig
+  Test #32: AigCutTest.CutCollect
+  Test #33: AigCutTest.CutLeavesSizeCollect
+  Test #34: AigCutTest.CutLeavesSizeCollectReal
+  Test #35: UtilTest.UtilTruthHexPrint
+  Test #36: UtilTest.UtilAddClauses
 
-Total Tests: 35
+Total Tests: 36
 ```
 
 ### Truth table
@@ -138,6 +139,9 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 - `AigTest, ResubSingleNodeAig` : Apply resubstitution to a single node. Case is the same as mentioned above.
 
 ### Gia
+- `GiaTest, GiaCollectFanoutInfo` : Standard process on collecting fanout information.
+> [!NOTE]
+> The interface `Gia_ObjFanoutNum` can not be used alone, you should call `Gia_ManStaticFanoutStart` and `Gia_ManStaticFanoutStop` before and after the fanout information collection.
 - `GiaSingleOperation, Gia2Aig` : `Gia` manager transform to `Aig` manager.
 - `GiaSingleOperation, Aig2Gia` : `Aig` manager transform to `Gia` manager with `&cec` interface verified.
 - `GiaSingleOperation, Gia2AigForOpt` : ABC9 to ABC for optimization. There's no direct manager in old rw/rf/b, so should be transformed to `Ntk` level. An example of balance is given here.
