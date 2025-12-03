@@ -51,4 +51,32 @@ TEST(GiaTest, CanAddAnAndGate) {
   Gia_ManStop(aig_manager);
 }
 
+
+/*!
+  \brief Standard process on collecting fanout information.
+*/
+TEST(GiaTest, GiaCollectFanoutInfo) {
+    Gia_Obj_t * pObj;
+    int i;
+    Gia_Man_t * giaMan = Gia_ManStart(100);
+    int input1 = Gia_ManAppendCi(giaMan);
+    int input2 = Gia_ManAppendCi(giaMan);
+    int input3 = Gia_ManAppendCi(giaMan);
+
+    int aOut0 = Gia_ManAppendAnd(giaMan, input1, input2);
+    int aOut1 = Gia_ManAppendAnd(giaMan, aOut0, input3);
+    Gia_ManAppendCo(giaMan, aOut1);
+
+    EXPECT_TRUE(giaMan->vFanoutNums == NULL);
+    Gia_ManStaticFanoutStart(giaMan);
+    EXPECT_TRUE(giaMan->vFanoutNums != NULL);
+    Gia_ManForEachAnd(giaMan, pObj, i)
+    {
+        EXPECT_TRUE(Gia_ObjFanoutNum(giaMan, pObj) >= 1);
+    }
+    Gia_ManStaticFanoutStop(giaMan);
+    EXPECT_TRUE(giaMan->vFanoutNums == NULL);
+    Gia_ManStop(giaMan);
+}
+
 ABC_NAMESPACE_IMPL_END
