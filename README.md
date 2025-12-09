@@ -47,32 +47,33 @@ This section will include all the tests and test suite. Current tests:
   Test #11: GiaSingleOperation.Aig2Gia
   Test #12: GiaSingleOperation.Gia2AigForOpt
   Test #13: GiaSingleOperation.Gia2AigForOptBack
-  Test #14: GiaSamples.FormChoicesWith3Samples
-  Test #15: AigTest.ConstructAig
-  Test #16: AigTest.StructureAnalysisAig
-  Test #17: AigTest.PhasesAig
-  Test #18: AigTest.NameObjAig
-  Test #19: AigTest.IsMuxAig
-  Test #20: AigTest.IsMuxControlAig
-  Test #21: AigTest.RecITEMUXAig
-  Test #22: AigTest.IsXORAig
-  Test #23: AigTest.SimulationAig
-  Test #24: AigTest.SimulationManualCompAig
-  Test #25: AigTest.Simulation6InputsAig
-  Test #26: AigTest.ReadFromFileAig
-  Test #27: AigTest.DuplicateAig
-  Test #28: AigTest.LevelTagAig
-  Test #29: AigTest.ReverseLevelAig
-  Test #30: AigTest.ResubAig
-  Test #31: AigTest.ResubSingleNodeAig
-  Test #32: AigCutTest.CutTruthVarNumAig
-  Test #33: AigCutTest.CutCollect
-  Test #34: AigCutTest.CutLeavesSizeCollect
-  Test #35: AigCutTest.CutLeavesSizeCollectReal
-  Test #36: UtilTest.UtilTruthHexPrint
-  Test #37: UtilTest.UtilAddClauses
+  Test #14: GiaSingleOperation.GiaOnMapperNf9
+  Test #15: GiaSamples.FormChoicesWith3Samples
+  Test #16: AigTest.ConstructAig
+  Test #17: AigTest.StructureAnalysisAig
+  Test #18: AigTest.PhasesAig
+  Test #19: AigTest.NameObjAig
+  Test #20: AigTest.IsMuxAig
+  Test #21: AigTest.IsMuxControlAig
+  Test #22: AigTest.RecITEMUXAig
+  Test #23: AigTest.IsXORAig
+  Test #24: AigTest.SimulationAig
+  Test #25: AigTest.SimulationManualCompAig
+  Test #26: AigTest.Simulation6InputsAig
+  Test #27: AigTest.ReadFromFileAig
+  Test #28: AigTest.DuplicateAig
+  Test #29: AigTest.LevelTagAig
+  Test #30: AigTest.ReverseLevelAig
+  Test #31: AigTest.ResubAig
+  Test #32: AigTest.ResubSingleNodeAig
+  Test #33: AigCutTest.CutTruthVarNumAig
+  Test #34: AigCutTest.CutCollect
+  Test #35: AigCutTest.CutLeavesSizeCollect
+  Test #36: AigCutTest.CutLeavesSizeCollectReal
+  Test #37: UtilTest.UtilTruthHexPrint
+  Test #38: UtilTest.UtilAddClauses
 
-Total Tests: 37
+Total Tests: 38
 ```
 
 ### Truth table
@@ -147,6 +148,7 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 - `GiaSingleOperation, Aig2Gia` : `Aig` manager transform to `Gia` manager with `&cec` interface verified.
 - `GiaSingleOperation, Gia2AigForOpt` : ABC9 to ABC for optimization. There's no direct manager in old rw/rf/b, so should be transformed to `Ntk` level. An example of balance is given here.
 - `GiaSingleOperation, Gia2AigForOptBack` : ABC9 to ABC for optimization. Then back to `Gia` manager. Omit as much high level structure as possible. An example with `balance` is shown here.
+- `GiaSingleOperation, GiaOnMapperNf9` : Simple interface on `&nf` mapper.
 - `GiaSamples, FormChoicesWith3Samples` : Construct choice network using 3 snapshots from `Gia` network.
 
 

@@ -5,6 +5,9 @@
 #include "aig/gia/giaAig.h"
 #include "base/main/abcapis.h"
 #include "base/main/main.h"
+#include "base/main/mainInt.h"
+#include "map/mio/mio.h"
+#include "map/scl/sclLib.h"
 #include "proof/cec/cec.h"
 
 #if defined(ABC_NAMESPACE)
@@ -20,7 +23,10 @@ typedef struct Abc_Frame_t_ Abc_Frame_t;
 Abc_Frame_t * Abc_FrameGetGlobalFrame();
 Aig_Man_t * Abc_NtkToDar( Abc_Ntk_t * pNtk, int fExors, int fRegisters );
 Abc_Ntk_t *Abc_NtkFromAigPhase(Aig_Man_t *pMan);
-
+void Abc_SclLoad( SC_Lib * pLib, SC_Lib ** ppScl );
+void Nf_ManSetDefaultPars( Jf_Par_t * pPars );
+Gia_Man_t * Nf_ManPerformMapping( Gia_Man_t * pGia, Jf_Par_t * pPars );
+Abc_Ntk_t * Abc_NtkFromCellMappedGia( Gia_Man_t * p, int fUseBuffs );
 #if defined(ABC_NAMESPACE)
 }
 using namespace ABC_NAMESPACE;
@@ -170,6 +176,42 @@ TEST(GiaSingleOperation, Gia2AigForOptBack) {
     Gia_ManStop(giaMan);
     Aig_ManStop(pAig);
     Abc_NtkDelete(pNtk);
+    Abc_Stop();
+}
+
+/*!
+  \brief Simple interface on &nf mapper
+*/
+TEST(GiaSingleOperation, GiaOnMapperNf9) {
+    char fileName[200];
+    strcpy(fileName, ASSETS_DIR);
+    strcat(fileName, "data/i10Samples/i10_SpId_0.aig");
+    Gia_Man_t *pGia = Gia_AigerRead( fileName, 0, 0, 0 );
+    Abc_Start();
+    Abc_Frame_t * pAbc = Abc_FrameGetGlobalFrame();
+    Jf_Par_t Pars, * pPars = &Pars;
+    Nf_ManSetDefaultPars( pPars );
+    
+
+    SC_DontUse dont_use = {0};
+    dont_use.dont_use_list = ABC_ALLOC(char *, 10);
+    dont_use.size = 0;
+    char libName[200];
+    strcpy(libName, ASSETS_DIR);
+    strcat(libName, "NangateOpenCellLibrary_typical.lib");
+    SC_Lib *pLib = Abc_SclReadLiberty( libName, 0, 0, dont_use, 0);
+    Abc_SclLoad( pLib, (SC_Lib **)&pAbc->pLibScl );
+    if ( pAbc->pLibScl )
+    {
+        Abc_SclInstallGenlib( pAbc->pLibScl, 0, 0, 0, 0 );
+        Mio_LibraryTransferCellIds();
+    }
+    Gia_Man_t *pGiaNew = Nf_ManPerformMapping(pGia, pPars);
+    if (pGiaNew == NULL) {
+        Abc_Print(-1, "Mapping has failed.\n");
+    }
+    Abc_Ntk_t * pNtkMapped = Abc_NtkFromCellMappedGia(pGiaNew, 0);
+    EXPECT_TRUE(Abc_NtkIsMappedLogic(pNtkMapped));
     Abc_Stop();
 }
 
