@@ -115,6 +115,8 @@ abc_properties(libabc-pic PUBLIC)
 set_property(TARGET libabc-pic PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET libabc-pic PROPERTY OUTPUT_NAME abc-pic)
 
+add_definitions(-DASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/test/")
+
 if(NOT DEFINED ABC_SKIP_TESTS)
     enable_testing()
     include(FetchContent)
@@ -130,3 +132,4 @@ if(NOT DEFINED ABC_SKIP_TESTS)
 endif()
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/test/data DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/test)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/NangateOpenCellLibrary_typical.lib DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/test)
