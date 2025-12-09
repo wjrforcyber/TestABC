@@ -128,3 +128,5 @@ if(NOT DEFINED ABC_SKIP_TESTS)
     include(GoogleTest)
     add_subdirectory(test)
 endif()
+
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/test/data DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/test)
