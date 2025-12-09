@@ -3,8 +3,25 @@
 #include "aig/aig/aig.h"
 #include "aig/gia/gia.h"
 #include "misc/util/abc_global.h"
-
 #include "proof/dch/dch.h"
+
+#if defined(ABC_NAMESPACE)
+namespace ABC_NAMESPACE
+{
+#elif defined(__cplusplus)
+extern "C"
+{
+#endif
+
+Gia_Man_t * Gia_ManAigSynch2Choices( Gia_Man_t * pGia1, Gia_Man_t * pGia2, Gia_Man_t * pGia3, Dch_Pars_t * pPars );
+
+#if defined(ABC_NAMESPACE)
+}
+using namespace ABC_NAMESPACE;
+#elif defined(__cplusplus)
+}
+#endif
+
 
 ABC_NAMESPACE_IMPL_START
 
@@ -12,7 +29,6 @@ ABC_NAMESPACE_IMPL_START
   \brief Construct choice network using 3 snapshots from `Gia` network.
 */
 TEST(GiaSamples, FormChoicesWith3Samples) {
-    extern Gia_Man_t * Gia_ManAigSynch2Choices( Gia_Man_t * pGia1, Gia_Man_t * pGia2, Gia_Man_t * pGia3, Dch_Pars_t * pPars );
     Dch_Pars_t * pParsDch = (Dch_Pars_t *)malloc(sizeof(Dch_Pars_t));
     Dch_ManSetDefaultParams( pParsDch );
     pParsDch->nBTLimit = 100;
