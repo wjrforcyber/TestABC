@@ -8,6 +8,7 @@
 #include "base/main/mainInt.h"
 #include "map/mio/mio.h"
 #include "map/scl/sclLib.h"
+#include "map/scl/sclSize.h"
 #include "proof/cec/cec.h"
 
 #if defined(ABC_NAMESPACE)
@@ -27,6 +28,7 @@ void Abc_SclLoad( SC_Lib * pLib, SC_Lib ** ppScl );
 void Nf_ManSetDefaultPars( Jf_Par_t * pPars );
 Gia_Man_t * Nf_ManPerformMapping( Gia_Man_t * pGia, Jf_Par_t * pPars );
 Abc_Ntk_t * Abc_NtkFromCellMappedGia( Gia_Man_t * p, int fUseBuffs );
+void Abc_SclTimePerform( SC_Lib * pLib, Abc_Ntk_t * pNtk, int nTreeCRatio, int fUseWireLoads, int fShowAll, int fPrintPath, int fDumpStats );
 #if defined(ABC_NAMESPACE)
 }
 using namespace ABC_NAMESPACE;
@@ -212,6 +214,53 @@ TEST(GiaSingleOperation, GiaOnMapperNf9) {
     }
     Abc_Ntk_t * pNtkMapped = Abc_NtkFromCellMappedGia(pGiaNew, 0);
     EXPECT_TRUE(Abc_NtkIsMappedLogic(pNtkMapped));
+    Abc_Stop();
+}
+
+
+
+/*!
+  \brief Give the delay and area mapping result of a mapped circuit with &nf mapper
+*/
+TEST(GiaSingleOperation, StimeChecking) {
+    char fileName[200];
+    strcpy(fileName, ASSETS_DIR);
+    strcat(fileName, "data/i10Samples/i10_SpId_0.aig");
+    Gia_Man_t *pGia = Gia_AigerRead( fileName, 0, 0, 0 );
+    Abc_Start();
+    Abc_Frame_t * pAbc = Abc_FrameGetGlobalFrame();
+    Jf_Par_t Pars, * pPars = &Pars;
+    Nf_ManSetDefaultPars( pPars );
+    
+
+    SC_DontUse dont_use = {0};
+    dont_use.dont_use_list = ABC_ALLOC(char *, 10);
+    dont_use.size = 0;
+    char libName[200];
+    strcpy(libName, ASSETS_DIR);
+    strcat(libName, "NangateOpenCellLibrary_typical.lib");
+    SC_Lib *pLib = Abc_SclReadLiberty( libName, 0, 0, dont_use, 0);
+    Abc_SclLoad( pLib, (SC_Lib **)&pAbc->pLibScl );
+    if ( pAbc->pLibScl )
+    {
+        Abc_SclInstallGenlib( pAbc->pLibScl, 0, 0, 0, 0 );
+        Mio_LibraryTransferCellIds();
+    }
+    Gia_Man_t *pGiaNew = Nf_ManPerformMapping(pGia, pPars);
+    if (pGiaNew == NULL) {
+        Abc_Print(-1, "Mapping has failed.\n");
+    }
+    Abc_Ntk_t * pNtkMapped = Abc_NtkFromCellMappedGia(pGiaNew, 0);
+    EXPECT_TRUE(Abc_NtkIsMappedLogic(pNtkMapped));
+    SC_Man * p;
+    p = Abc_SclManStart( pLib, pNtkMapped, 0, 1, 0, 0 );
+    int fRise = 0;
+    Abc_Obj_t * pPivot = Abc_SclFindCriticalCo( p, &fRise ); 
+    float maxDelay = Abc_SclObjTimeOne( p, pPivot, fRise );
+    float maxArea = Abc_SclGetTotalArea(p->pNtk);
+    EXPECT_TRUE(maxDelay != 0);
+    EXPECT_TRUE(maxArea != 0);
+    Abc_SclManFree( p );
     Abc_Stop();
 }
 
