@@ -1,4 +1,5 @@
 #include "gtest/gtest.h"
+#include <cstdlib>
 
 #include "base/abc/abc.h"
 #include "base/io/ioAbc.h"
@@ -623,6 +624,7 @@ TEST(AigTest, ReadFromFileAig) {
     EXPECT_TRUE(pNtk != NULL);
     EXPECT_TRUE(Abc_NtkCheck(pNtk) == 1);
     Abc_NtkDelete(pNtk);
+    free(pFileName);
 }
 
 ABC_NAMESPACE_IMPL_END
