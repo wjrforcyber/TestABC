@@ -278,6 +278,7 @@ TEST(AigCutTest, CutLeavesSizeCollectReal) {
     Cut_ManStop(pCutMan);
     Abc_NtkDelete(pNtk);
     Abc_Stop();
+    free(pFileName);
 }
 
 

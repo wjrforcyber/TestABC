@@ -71,10 +71,11 @@ This section will include all the tests and test suite. Current tests:
   Test #35: AigCutTest.CutCollect
   Test #36: AigCutTest.CutLeavesSizeCollect
   Test #37: AigCutTest.CutLeavesSizeCollectReal
-  Test #38: UtilTest.UtilTruthHexPrint
-  Test #39: UtilTest.UtilAddClauses
+  Test #38: GiaTest.GiaCollectFanoutInfo
+  Test #39: UtilTest.UtilTruthHexPrint
+  Test #40: UtilTest.UtilAddClauses
 
-Total Tests: 39
+Total Tests: 40
 ```
 
 ### Truth table
@@ -153,6 +154,8 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 - `GiaSingleOperation, StimeChecking` : Give the delay and area mapping result of a mapped circuit with `&nf` mapper.
 - `GiaSamples, FormChoicesWith3Samples` : Construct choice network using 3 snapshots from `Gia` network.
 
+### miniaig
+- `GiaTest, GiaCollectFanoutInfo` : Test the efficiency of minaig compared to aig and gia structure. (Only has time comparison for now.)
 
 ### Cuts
 - `AigCutTest, CutTruthVarNumAig` : Testing the number of words needed to be allocated for a number of variables, node that in ABC, a word length is always considered as 32 bits.
