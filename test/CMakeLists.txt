@@ -1,4 +1,5 @@
 add_subdirectory(truth)
 add_subdirectory(gia)
 add_subdirectory(aig)
+add_subdirectory(miniaig)
 add_subdirectory(util)
