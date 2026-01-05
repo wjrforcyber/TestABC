@@ -627,4 +627,84 @@ TEST(AigTest, ReadFromFileAig) {
     free(pFileName);
 }
 
+/*!
+ \brief Dual function test on aig
+*/
+TEST(AigTest, DualPropertyMig) {
+    int nVar = 3;
+    // Create a majority to check dual (By nature dual)
+    Vec_Ptr_t * vNodes = Vec_PtrAlloc(10);
+    Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    Abc_Obj_t * pi0 = Abc_NtkCreatePi(pNtk);
+    Abc_Obj_t * pi1 = Abc_NtkCreatePi(pNtk);
+    Abc_Obj_t * pi2 = Abc_NtkCreatePi(pNtk);
+
+    Abc_Obj_t * po = Abc_NtkCreatePo(pNtk);
+    Abc_Aig_t *pMan = (Abc_Aig_t *)pNtk->pManFunc;
+    Abc_Obj_t *and_ab = Abc_AigAnd(pMan, pi0, pi1);
+    Abc_Obj_t *and_bc = Abc_AigAnd(pMan, pi1, pi2);
+    Abc_Obj_t *and_ac = Abc_AigAnd(pMan, pi0, pi2);
+    Abc_Obj_t *or_ab_bc = Abc_AigOr(pMan, and_ab, and_bc);
+    Abc_Obj_t *majority = Abc_AigOr(pMan, or_ab_bc, and_ac);
+    Abc_ObjAddFanin(po, majority);
+    
+    Abc_Obj_t * pCi;
+    Abc_Obj_t * pNode;
+    int index;
+    Abc_NtkForEachPi(pNtk, pCi, index)
+    {
+        Vec_PtrPush(vNodes, pCi);
+    }
+    Abc_NtkForEachNode(pNtk, pNode, index)
+    {
+        Vec_PtrPush(vNodes, pNode);
+    }
+    int i = 0, k = 0;
+    int nBits      = (1 << nVar);
+    int nWords     = (nBits <= 32)? 1 : (nBits / 32);
+    Vec_Ptr_t *vSims = Vec_PtrAlloc( 100 );
+    unsigned int *pInfo = ABC_ALLOC( unsigned, nWords * (100 + 1) );
+    unsigned int *pData;
+    for ( i = 0; i < 100; i++ )
+        Vec_PtrPush( vSims, pInfo + i * nWords );
+    // set elementary truth tables
+    for ( k = 0; k < nVar; k++ )
+    {
+        pData = (unsigned *)vSims->pArray[k];
+        for ( i = 0; i < nBits; i++ )
+            if ( i & (1 << k) )
+                pData[i>>5] |= (1 << (i&31));
+    }
+    Abc_ManResubSimulate( vNodes, nVar, vSims, 6, 1);
+    unsigned int uRoot0 = *((unsigned int *)Abc_ObjFanin0(po)->pData) & 0xff;
+    unsigned fPhase0 = Abc_ObjFanin0(po)->fPhase;
+    Abc_NtkCleanData( pNtk );
+    Vec_PtrFree(vSims);
+    ABC_FREE(pInfo);
+
+    vSims = Vec_PtrAlloc( 100 );
+    pInfo = ABC_ALLOC( unsigned, nWords * (100 + 1) );
+    for ( i = 0; i < 100; i++ )
+        Vec_PtrPush( vSims, pInfo + i * nWords );
+    // set elementary truth tables
+    for ( k = 0; k < nVar; k++ )
+    {
+        pData = (unsigned *)vSims->pArray[k];
+        for ( i = 0; i < nBits; i++ )
+            if ( !(i & (1 << k)) )
+                pData[i>>5] |= (1 << (i&31));
+    }
+    Abc_ManResubSimulate( vNodes, nVar, vSims, 6, 1);
+    unsigned int uRoot1 = (*((unsigned int *)Abc_ObjFanin0(po)->pData)) & 0xFF;
+    unsigned fPhase1 = Abc_ObjFanin0(po)->fPhase;
+    EXPECT_TRUE((fPhase0 ^ fPhase1) == 1);
+    // Invert the output to get the dual
+    Vec_PtrFree(vSims);
+    ABC_FREE(pInfo);
+    printf("The uRoot0 is %x\n", uRoot0);
+    printf("The uRoot1 is %x\n", uRoot1);
+    EXPECT_EQ(uRoot0, uRoot1);
+    Abc_NtkDelete(pNtk);
+}
+
 ABC_NAMESPACE_IMPL_END

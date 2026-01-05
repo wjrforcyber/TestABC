@@ -62,20 +62,21 @@ This section will include all the tests and test suite. Current tests:
   Test #26: AigTest.SimulationManualCompAig
   Test #27: AigTest.Simulation6InputsAig
   Test #28: AigTest.ReadFromFileAig
-  Test #29: AigTest.DuplicateAig
-  Test #30: AigTest.LevelTagAig
-  Test #31: AigTest.ReverseLevelAig
-  Test #32: AigTest.ResubAig
-  Test #33: AigTest.ResubSingleNodeAig
-  Test #34: AigCutTest.CutTruthVarNumAig
-  Test #35: AigCutTest.CutCollect
-  Test #36: AigCutTest.CutLeavesSizeCollect
-  Test #37: AigCutTest.CutLeavesSizeCollectReal
-  Test #38: GiaTest.GiaCollectFanoutInfo
-  Test #39: UtilTest.UtilTruthHexPrint
-  Test #40: UtilTest.UtilAddClauses
+  Test #29: AigTest.DualPropertyMig
+  Test #30: AigTest.DuplicateAig
+  Test #31: AigTest.LevelTagAig
+  Test #32: AigTest.ReverseLevelAig
+  Test #33: AigTest.ResubAig
+  Test #34: AigTest.ResubSingleNodeAig
+  Test #35: AigCutTest.CutTruthVarNumAig
+  Test #36: AigCutTest.CutCollect
+  Test #37: AigCutTest.CutLeavesSizeCollect
+  Test #38: AigCutTest.CutLeavesSizeCollectReal
+  Test #39: GiaTest.GiaCollectFanoutInfo
+  Test #40: UtilTest.UtilTruthHexPrint
+  Test #41: UtilTest.UtilAddClauses
 
-Total Tests: 40
+Total Tests: 41
 ```
 
 ### Truth table
@@ -138,9 +139,11 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 > [!NOTE]
 > `Abc_ObjRequiredLevel` should be called after `Abc_NtkStartReverseLevels`, or the reverse level `pNtk->vLevelsR` will be `NULL`.
 
-- `AigTest, ResubAig` : Apply resubstitution to a network. This case is from Figure 3.2.2 from [paper](https://people.eecs.berkeley.edu/~alanmi/publications/2006/iwls06_sls.pdf).                                                          
+- `AigTest, ResubAig` : Apply resubstitution to a network. This case is from Figure 3.2.2 from [paper](https://people.eecs.berkeley.edu/~alanmi/publications/2006/iwls06_sls.pdf).
 
 - `AigTest, ResubSingleNodeAig` : Apply resubstitution to a single node. Case is the same as mentioned above.
+
+- `AigTest, DualPropertyMig` : Self-dual function simulation on aig, using a majority gate as an example.
 
 ### Gia
 - `GiaTest, GiaCollectFanoutInfo` : Standard process on collecting fanout information.
