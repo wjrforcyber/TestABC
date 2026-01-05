@@ -144,6 +144,7 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 - `AigTest, ResubSingleNodeAig` : Apply resubstitution to a single node. Case is the same as mentioned above.
 
 - `AigTest, DualPropertyMig` : Self-dual function simulation on aig, using a majority gate as an example.
+<br> The majority function is self-dual $f = xy \lor yz \lor zx$, $f^d = \overline{(\bar{x} \bar{y} \lor \bar{y} \bar{z} \lor \bar{z} \bar{x})}$, $f = f^d$.
 
 ### Gia
 - `GiaTest, GiaCollectFanoutInfo` : Standard process on collecting fanout information.
