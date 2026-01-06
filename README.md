@@ -63,20 +63,21 @@ This section will include all the tests and test suite. Current tests:
   Test #27: AigTest.Simulation6InputsAig
   Test #28: AigTest.ReadFromFileAig
   Test #29: AigTest.DualPropertyMig
-  Test #30: AigTest.DuplicateAig
-  Test #31: AigTest.LevelTagAig
-  Test #32: AigTest.ReverseLevelAig
-  Test #33: AigTest.ResubAig
-  Test #34: AigTest.ResubSingleNodeAig
-  Test #35: AigCutTest.CutTruthVarNumAig
-  Test #36: AigCutTest.CutCollect
-  Test #37: AigCutTest.CutLeavesSizeCollect
-  Test #38: AigCutTest.CutLeavesSizeCollectReal
-  Test #39: GiaTest.GiaCollectFanoutInfo
-  Test #40: UtilTest.UtilTruthHexPrint
-  Test #41: UtilTest.UtilAddClauses
+  Test #30: AigTest.CollectSingleAndAig
+  Test #31: AigTest.DuplicateAig
+  Test #32: AigTest.LevelTagAig
+  Test #33: AigTest.ReverseLevelAig
+  Test #34: AigTest.ResubAig
+  Test #35: AigTest.ResubSingleNodeAig
+  Test #36: AigCutTest.CutTruthVarNumAig
+  Test #37: AigCutTest.CutCollect
+  Test #38: AigCutTest.CutLeavesSizeCollect
+  Test #39: AigCutTest.CutLeavesSizeCollectReal
+  Test #40: GiaTest.GiaCollectFanoutInfo
+  Test #41: UtilTest.UtilTruthHexPrint
+  Test #42: UtilTest.UtilAddClauses
 
-Total Tests: 41
+Total Tests: 42
 ```
 
 ### Truth table
@@ -145,6 +146,8 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 
 - `AigTest, DualPropertyMig` : Self-dual function simulation on aig, using a majority gate as an example.
 <br> The majority function is self-dual $f = xy \lor yz \lor zx$, $f^d = \overline{(\bar{x} \bar{y} \lor \bar{y} \bar{z} \lor \bar{z} \bar{x})}$, $f = f^d$.
+
+- `AigTest, CollectSingleAndAig` : Collecting nodes using DFS on a single target node on AIG.
 
 ### Gia
 - `GiaTest, GiaCollectFanoutInfo` : Standard process on collecting fanout information.
