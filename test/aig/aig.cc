@@ -16,6 +16,7 @@ extern "C"
 #endif
 
 void Abc_ManResubSimulate( Vec_Ptr_t * vDivs, int nLeaves, Vec_Ptr_t * vSims, int nLeavesMax, int nWords );
+void Abc_NtkDfs_rec( Abc_Obj_t * pNode, Vec_Ptr_t * vNodes );
 
 #if defined(ABC_NAMESPACE)
 }
@@ -704,6 +705,53 @@ TEST(AigTest, DualPropertyMig) {
     printf("The uRoot0 is %x\n", uRoot0);
     printf("The uRoot1 is %x\n", uRoot1);
     EXPECT_EQ(uRoot0, uRoot1);
+    Abc_NtkDelete(pNtk);
+}
+
+
+/*!
+ \brief DFS collect on a single AND node
+*/
+TEST(AigTest, CollectSingleAndAig) {
+    Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    int nInputs = 6;
+    int nOutputs = 1;
+    int i = 0, k = 0;
+    Abc_Obj_t * pObj;
+    // create the PIs
+    for ( i = 0; i < nInputs; i++ )
+    {
+        pObj = Abc_NtkCreatePi(pNtk);    
+    }
+    // create the POs
+    for ( i = 0; i < nOutputs; i++ )
+    {
+        pObj = Abc_NtkCreatePo(pNtk);   
+    }
+    Abc_Obj_t * pi00 = Abc_NtkPi(pNtk, 0);
+    Abc_Obj_t * pi01 = Abc_NtkPi(pNtk, 1);
+    Abc_Obj_t * pi02 = Abc_NtkPi(pNtk, 2);
+    Abc_Obj_t * pi03 = Abc_NtkPi(pNtk, 3);
+    Abc_Obj_t * pi04 = Abc_NtkPi(pNtk, 4);
+    Abc_Obj_t * pi05 = Abc_NtkPi(pNtk, 5);
+    Abc_Obj_t * pN2012 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi01), pi02);
+    Abc_Obj_t * pN2013 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi00, Abc_ObjNot(pN2012));
+    Abc_Obj_t * pN2011 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi04), pi05);
+    Abc_Obj_t * pN2014 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi03), Abc_ObjNot(pN2011));
+    Abc_Obj_t * pRoot = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pN2013), pN2014);
+    Abc_ObjAddFanin(Abc_NtkPo(pNtk, 0), Abc_ObjNot(pRoot));
+    Vec_Ptr_t * vNodes = Vec_PtrAlloc(10);
+    Abc_NtkIncrementTravId( pNtk );
+    Abc_NtkDfs_rec( pN2013, vNodes );
+    // Excluding PI
+    EXPECT_EQ(Vec_PtrSize(vNodes), 2);
+    Vec_PtrFree(vNodes);
+    vNodes = Vec_PtrAlloc(10);
+    Abc_NtkIncrementTravId( pNtk );
+    Abc_NtkDfs_rec( pRoot, vNodes ); 
+    // Excluding PI
+    EXPECT_EQ(Vec_PtrSize(vNodes), 5);
+    Vec_PtrFree(vNodes);
     Abc_NtkDelete(pNtk);
 }
 
