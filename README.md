@@ -58,26 +58,27 @@ This section will include all the tests and test suite. Current tests:
   Test #22: AigTest.IsMuxControlAig
   Test #23: AigTest.RecITEMUXAig
   Test #24: AigTest.IsXORAig
-  Test #25: AigTest.SimulationAig
-  Test #26: AigTest.SimulationManualCompAig
-  Test #27: AigTest.Simulation6InputsAig
-  Test #28: AigTest.ReadFromFileAig
-  Test #29: AigTest.DualPropertyMig
-  Test #30: AigTest.CollectSingleAndAig
-  Test #31: AigTest.DuplicateAig
-  Test #32: AigTest.LevelTagAig
-  Test #33: AigTest.ReverseLevelAig
-  Test #34: AigTest.ResubAig
-  Test #35: AigTest.ResubSingleNodeAig
-  Test #36: AigCutTest.CutTruthVarNumAig
-  Test #37: AigCutTest.CutCollect
-  Test #38: AigCutTest.CutLeavesSizeCollect
-  Test #39: AigCutTest.CutLeavesSizeCollectReal
-  Test #40: GiaTest.GiaCollectFanoutInfo
-  Test #41: UtilTest.UtilTruthHexPrint
-  Test #42: UtilTest.UtilAddClauses
+  Test #25: AigTest.XORSelfAntiDualAig
+  Test #26: AigTest.SimulationAig
+  Test #27: AigTest.SimulationManualCompAig
+  Test #28: AigTest.Simulation6InputsAig
+  Test #29: AigTest.ReadFromFileAig
+  Test #30: AigTest.DualPropertyMig
+  Test #31: AigTest.CollectSingleAndAig
+  Test #32: AigTest.DuplicateAig
+  Test #33: AigTest.LevelTagAig
+  Test #34: AigTest.ReverseLevelAig
+  Test #35: AigTest.ResubAig
+  Test #36: AigTest.ResubSingleNodeAig
+  Test #37: AigCutTest.CutTruthVarNumAig
+  Test #38: AigCutTest.CutCollect
+  Test #39: AigCutTest.CutLeavesSizeCollect
+  Test #40: AigCutTest.CutLeavesSizeCollectReal
+  Test #41: GiaTest.GiaCollectFanoutInfo
+  Test #42: UtilTest.UtilTruthHexPrint
+  Test #43: UtilTest.UtilAddClauses
 
-Total Tests: 42
+Total Tests: 43
 ```
 
 ### Truth table
@@ -131,6 +132,8 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 <p align="center">
     <img src="./resources/images/xor.png" width="600"/>
 </p>
+
+- `AigTest, XORSelfAntiDualAig` : Self-anti-dual case on XOR, which could also be seen as case $(a)$ to case $(b)$ from `AigTest, IsXORAig`.
 
 - `AigTest, LevelTagAig` : Calculate level of each AND gate.
 > [!NOTE]

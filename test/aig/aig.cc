@@ -15,6 +15,10 @@ extern "C"
 {
 #endif
 
+void Abc_Start();
+void Abc_Stop();
+typedef struct Abc_Frame_t_ Abc_Frame_t;
+Abc_Frame_t * Abc_FrameGetGlobalFrame();
 void Abc_ManResubSimulate( Vec_Ptr_t * vDivs, int nLeaves, Vec_Ptr_t * vSims, int nLeavesMax, int nWords );
 void Abc_NtkDfs_rec( Abc_Obj_t * pNode, Vec_Ptr_t * vNodes );
 
@@ -309,6 +313,45 @@ TEST(AigTest, IsXORAig) {
 }
 
 
+/*! 
+ \brief Self-anti-dual modification on XOR
+*/
+TEST(AigTest, XORSelfAntiDualAig) {
+    //case a
+    Abc_Ntk_t * pMiter;
+    Abc_Start();
+    Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    Abc_Obj_t * pi0 = Abc_NtkCreatePi(pNtk);
+    Abc_Obj_t * pi1 = Abc_NtkCreatePi(pNtk);
+
+    Abc_Obj_t * po = Abc_NtkCreatePo(pNtk);
+    Abc_Obj_t * and0 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi0, pi1);
+    Abc_Obj_t * and1 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi0), Abc_ObjNot(pi1));
+    Abc_Obj_t * andOut = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(and0),Abc_ObjNot(and1));
+    Abc_ObjAddFanin(po, andOut);
+    EXPECT_TRUE(Abc_NodeIsExorType(andOut));
+
+    Abc_Ntk_t * pNtk2 = Abc_NtkDup(pNtk);
+    //check origin complemented attributes
+    EXPECT_TRUE(and0->fCompl0 == 0);
+    EXPECT_TRUE(and0->fCompl1 == 0);
+    EXPECT_TRUE(and1->fCompl0 == 1);
+    EXPECT_TRUE(and1->fCompl1 == 1);
+    //modify the original network
+    and0->fCompl0 ^= 1;
+    and0->fCompl1 ^= 1;
+    and1->fCompl0 ^= 1;
+    and1->fCompl1 ^= 1;
+    //should still be eq
+    pMiter = Abc_NtkMiter( pNtk, pNtk2, 1, 0, 0, 0 );
+    EXPECT_TRUE( pMiter != NULL );
+    int RetValue = Abc_NtkMiterIsConstant( pMiter );
+    EXPECT_EQ(RetValue, 1);
+    Abc_NtkDelete( pMiter );
+    Abc_NtkDelete(pNtk);
+    Abc_NtkDelete(pNtk2);
+    Abc_Stop();
+}
 
 /*!
  \brief Analysis simulation on different cases
