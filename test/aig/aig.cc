@@ -312,12 +312,13 @@ TEST(AigTest, IsXORAig) {
     Abc_NtkDelete(pNtk3);
 }
 
-
 /*! 
- \brief Self-anti-dual modification on XOR
+ \brief Simulations on self-anti-dual on XOR
 */
 TEST(AigTest, XORSelfAntiDualAig) {
     //case a
+    Abc_Obj_t * pObj;
+    Vec_Ptr_t * vNodes = Vec_PtrAlloc(100);
     Abc_Ntk_t * pMiter;
     Abc_Start();
     Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
@@ -330,7 +331,40 @@ TEST(AigTest, XORSelfAntiDualAig) {
     Abc_Obj_t * andOut = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(and0),Abc_ObjNot(and1));
     Abc_ObjAddFanin(po, andOut);
     EXPECT_TRUE(Abc_NodeIsExorType(andOut));
-
+    int pi_index;
+    int n_index;
+    Abc_NtkForEachCi( pNtk, pObj, pi_index )
+    {
+        Vec_PtrPush(vNodes, pObj);
+    }
+    Abc_NtkForEachNode(pNtk, pObj, n_index)
+    {
+        Vec_PtrPush(vNodes, pObj);
+    }
+    // First simulation on original graph
+    int i, k;
+    int nBits      = (1 << 2);
+    int nWords     = (nBits <= 32)? 1 : (nBits / 32);
+    Vec_Ptr_t *vSims = Vec_PtrAlloc( 100 );
+    unsigned int *pInfo = ABC_ALLOC( unsigned, nWords * (100 + 1) );
+    unsigned int *pData;
+    for ( i = 0; i < 100; i++ )
+        Vec_PtrPush( vSims, pInfo + i * nWords );
+    // set elementary truth tables
+    unsigned int * vInputsVOri = (unsigned int *)malloc(sizeof(unsigned int) * 2);
+    unsigned int * vInputsVFlip = (unsigned int *)malloc(sizeof(unsigned int) * 2);
+    for ( k = 0; k < 2; k++ )
+    {
+        pData = (unsigned *)vSims->pArray[k];
+        for ( i = 0; i < nBits; i++ )
+            if ( i & (1 << k) )
+                pData[i>>5] |= (1 << (i&31));
+        // collect elementary truth tables
+        vInputsVOri[k] = *pData;
+    }
+    Abc_ManResubSimulate( vNodes, 2, vSims, 2, 1);
+    EXPECT_TRUE(andOut->pData != NULL);
+    EXPECT_TRUE( *(unsigned int *)(andOut->pData) == 0x6 ); // 0110
     Abc_Ntk_t * pNtk2 = Abc_NtkDup(pNtk);
     //check origin complemented attributes
     EXPECT_TRUE(and0->fCompl0 == 0);
@@ -342,6 +376,37 @@ TEST(AigTest, XORSelfAntiDualAig) {
     and0->fCompl1 ^= 1;
     and1->fCompl0 ^= 1;
     and1->fCompl1 ^= 1;
+    
+    Vec_PtrFree(vSims);
+    ABC_FREE(pInfo);
+    Abc_NtkCleanData(pNtk);
+    
+    vSims = Vec_PtrAlloc( 100 );
+    pInfo = ABC_ALLOC( unsigned, nWords * (100 + 1) );
+    for ( i = 0; i < 100; i++ )
+        Vec_PtrPush( vSims, pInfo + i * nWords );
+    // set elementary truth tables
+    for ( k = 0; k < 2; k++ )
+    {
+        pData = (unsigned *)vSims->pArray[k];
+        for ( i = 0; i < nBits; i++ )
+            if (!( i & (1 << k)) )
+                pData[i>>5] |= (1 << (i&31));
+        // collect elementary truth tables
+        vInputsVFlip[k] = *pData;
+    }
+    for (k = 0; k < 2; k++)
+    {
+        EXPECT_TRUE(vInputsVFlip[k] == (~vInputsVOri[k] & 0xF));
+    }
+    
+    Abc_ManResubSimulate( vNodes, 2, vSims, 2, 1);
+    EXPECT_TRUE(andOut->pData != NULL);
+    EXPECT_TRUE( *(unsigned int *)(andOut->pData) == 0x6 ); // 0110
+    Vec_PtrFree(vSims);
+    ABC_FREE(pInfo);
+    Abc_NtkCleanData(pNtk);
+    
     //should still be eq
     pMiter = Abc_NtkMiter( pNtk, pNtk2, 1, 0, 0, 0 );
     EXPECT_TRUE( pMiter != NULL );
