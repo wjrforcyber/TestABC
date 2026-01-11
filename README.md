@@ -74,11 +74,12 @@ This section will include all the tests and test suite. Current tests:
   Test #38: AigCutTest.CutCollect
   Test #39: AigCutTest.CutLeavesSizeCollect
   Test #40: AigCutTest.CutLeavesSizeCollectReal
-  Test #41: GiaTest.GiaCollectFanoutInfo
-  Test #42: UtilTest.UtilTruthHexPrint
-  Test #43: UtilTest.UtilAddClauses
+  Test #41: AigCutTest.CutTruthSimTruth
+  Test #42: GiaTest.GiaCollectFanoutInfo
+  Test #43: UtilTest.UtilTruthHexPrint
+  Test #44: UtilTest.UtilAddClauses
 
-Total Tests: 43
+Total Tests: 44
 ```
 
 ### Truth table
@@ -174,6 +175,10 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 > [!NOTE]
 > Trivial cut is always the first one, which only contain the node itself. You will see the check in this example.
 - `AigCutTest, CutLeavesSizeCollectReal` : Every node type should have cuts, even only a single trivial one.
+- `AigCutTest, CutTruthSimTruth` : Test the value of cut truth calculation, the result should be the same as `Abc_ManResubSimulate`'s results. (However, this is not always the case, by using `Abc_ManResubSimulate`, phase should also be considered.)
+<p align="center">
+    <img src="./resources/images/CutSimTruth.png" width="300"/>
+</p>
 
 ### Util
 - `UtilTest, UtilTruthHexPrint` : Showing how to print a truth table into a hex format.
