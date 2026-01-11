@@ -71,17 +71,17 @@ TEST(AigCutTest, CutCollect) {
         pObj = Abc_NtkCreatePo(pNtk);   
     }
     Abc_Obj_t * pi00 = Abc_NtkPi(pNtk, 0);
-    Abc_ObjAssignName(pi00, "pi00", NULL);
+    Abc_ObjAssignName(pi00, "pi016", NULL);
     Abc_Obj_t * pi01 = Abc_NtkPi(pNtk, 1);
-    Abc_ObjAssignName(pi01, "pi01", NULL);
+    Abc_ObjAssignName(pi01, "n984", NULL);
     Abc_Obj_t * pi02 = Abc_NtkPi(pNtk, 2);
-    Abc_ObjAssignName(pi02, "pi02", NULL);
+    Abc_ObjAssignName(pi02, "n1600", NULL);
     Abc_Obj_t * pi03 = Abc_NtkPi(pNtk, 3);
-    Abc_ObjAssignName(pi03, "pi03", NULL);
+    Abc_ObjAssignName(pi03, "n507", NULL);
     Abc_Obj_t * pi04 = Abc_NtkPi(pNtk, 4);
-    Abc_ObjAssignName(pi04, "pi04", NULL);
+    Abc_ObjAssignName(pi04, "pi039", NULL);
     Abc_Obj_t * pi05 = Abc_NtkPi(pNtk, 5);
-    Abc_ObjAssignName(pi05, "pi05", NULL);
+    Abc_ObjAssignName(pi05, "pi182", NULL);
     Abc_Obj_t * pN2012 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, Abc_ObjNot(pi01), pi02);
     Abc_ObjAssignName(pN2012, "n2012", NULL);
     Abc_Obj_t * pN2013 = Abc_AigAnd((Abc_Aig_t *)pNtk->pManFunc, pi00, Abc_ObjNot(pN2012));
@@ -110,13 +110,28 @@ TEST(AigCutTest, CutCollect) {
     Abc_NtkForEachCi( pNtk, pObj, i )
         if ( Abc_ObjFanoutNum(pObj) > 0 )
             Cut_NodeSetTriv( pCutMan, pObj->Id );
-        
-    pCut = (Cut_Cut_t *)Abc_NodeGetCutsRecursive( pCutMan, pN2013, 0, 0 );
-    printf(" Node n2013:\n");
+    unsigned int umask[] = {0x1, 0x3, 0xf, 0xff, 0xffff};
+    printf(" Node n2012(phase = %d):\n", pN2012->fPhase);
+    pCut = (Cut_Cut_t *)Abc_NodeGetCutsRecursive( pCutMan, pN2012, 0, 0 );
     for ( pCut = pCut->pNext; pCut; pCut = pCut->pNext )
     {
         unsigned * pTruth = Cut_CutReadTruth(pCut);
-        printf("Cut %d:(0x%x)\n", index, *pTruth);
+        printf("Cut %d:(0x%016x)\n", index, *pTruth & umask[pCut->nLeaves]);
+        // only one cut for n2012
+        EXPECT_TRUE((*pTruth & umask[pCut->nLeaves]) == 0x4);
+        for ( i = 0; i < (int)pCut->nLeaves; i++ )
+        {
+            Abc_Obj_t * pFanin = Abc_NtkObj( pN2012->pNtk, pCut->pLeaves[i] );
+            printf("%d(%s) ", Abc_ObjId(pFanin), Abc_ObjName(pFanin));
+        }
+        printf("\n");
+    }
+    pCut = (Cut_Cut_t *)Abc_NodeGetCutsRecursive( pCutMan, pN2013, 0, 0 );
+    printf(" Node n2013(phase = %d):\n", pN2013->fPhase);
+    for ( pCut = pCut->pNext; pCut; pCut = pCut->pNext )
+    {
+        unsigned * pTruth = Cut_CutReadTruth(pCut);
+        printf("Cut %d:(0x%016x)\n", index, *pTruth & umask[pCut->nLeaves]);
         for ( i = 0; i < (int)pCut->nLeaves; i++ )
         {
             Abc_Obj_t * pFanin = Abc_NtkObj( pN2013->pNtk, pCut->pLeaves[i] );
@@ -195,14 +210,14 @@ TEST(AigCutTest, CutLeavesSizeCollect) {
     Abc_NtkForEachCi( pNtk, pObj, i )
         if ( Abc_ObjFanoutNum(pObj) > 0 )
             Cut_NodeSetTriv( pCutMan, pObj->Id );
-        
+    unsigned int umask[] = {0x1, 0x3, 0xf, 0xff, 0xffff, 0xffffffff};
     pCut = (Cut_Cut_t *)Abc_NodeGetCutsRecursive( pCutMan, pRoot, 0, 0 );
     EXPECT_TRUE(pCut->pLeaves[0] == pRoot->Id && pCut->nLeaves == 1);
     printf(" Node pRoot(LSIZEMAX = 4):\n");
     for ( pCut = pCut->pNext; pCut; pCut = pCut->pNext )
     {
         unsigned * pTruth = Cut_CutReadTruth(pCut);
-        printf("Cut %d:(0x%x)\n", index4, *pTruth);
+        printf("Cut %d:(0x%x)\n", index4, *pTruth & umask[pCut->nLeaves]);
         for ( i = 0; i < (int)pCut->nLeaves; i++ )
         {
             Abc_Obj_t * pFanin = Abc_NtkObj( pRoot->pNtk, pCut->pLeaves[i] );
@@ -225,7 +240,7 @@ TEST(AigCutTest, CutLeavesSizeCollect) {
     for ( pCut = pCut->pNext; pCut; pCut = pCut->pNext )
     {
         unsigned * pTruth = Cut_CutReadTruth(pCut);
-        printf("Cut %d:(0x%x)\n", index5, *pTruth);
+        printf("Cut %d:(0x%x)\n", index5, *pTruth & umask[pCut->nLeaves]);
         for ( i = 0; i < (int)pCut->nLeaves; i++ )
         {
             Abc_Obj_t * pFanin = Abc_NtkObj( pRoot->pNtk, pCut->pLeaves[i] );
