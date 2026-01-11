@@ -169,7 +169,7 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 
 ### Cuts
 - `AigCutTest, CutTruthVarNumAig` : Testing the number of words needed to be allocated for a number of variables, node that in ABC, a word length is always considered as 32 bits.
-- `AigCutTest, CutCollect` : Collecting cuts on a single AND node. Use the example AIG case from `AigTest, Simulation6InputsAig`.
+- `AigCutTest, CutCollect` : Collecting cuts on a single AND node. Use the example AIG case from `AigTest, Simulation6InputsAig`. Note that the $n_{th}$ leaf of the cut shows the $n_{th}$ variable in simulation.
 - `AigCutTest, CutLeavesSizeCollect` : Check the cut set difference when modifying the cut max leaf size.
 > [!NOTE]
 > Trivial cut is always the first one, which only contain the node itself. You will see the check in this example.
