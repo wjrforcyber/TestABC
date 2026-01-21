@@ -109,6 +109,10 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 </p>
 
 - `AigTest, SimulationAig` : Simulation on every condition of a 2 input AND gate. It shows a way isolated from `resub` to perform an exact simulation.
+
+> [!CAUTION]
+> Do notice that the simulation process in this method use the `pData` in `Abc_Obj_t`, it is a multipurpose pointer, so be careful when mixing different kinds of interfaces, this should be avoided or add additional pointers. Eg, some choices interfaces visit `pData` to access candidates, which might have conflicts.
+
 - `AigTest, SimulationManualCompAig` : Showcase on analyzing simulation on same structure cases with manually changed complemented attributes.
 - `AigTest, Simulation6InputsAig` : Give a detailed analysis on a 6-input window from a case i10.aig. Show the exact simulation result in some internal nodes. Check this example to get a deep comprehension about the phases and node encoding process. The window is structured as below:
 <p align="center">
