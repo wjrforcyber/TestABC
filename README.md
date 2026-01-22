@@ -73,13 +73,14 @@ This section will include all the tests and test suite. Current tests:
   Test #37: AigCutTest.CutTruthVarNumAig
   Test #38: AigCutTest.CutCollect
   Test #39: AigCutTest.CutLeavesSizeCollect
-  Test #40: AigCutTest.CutLeavesSizeCollectReal
-  Test #41: AigCutTest.CutTruthSimTruth
-  Test #42: GiaTest.GiaCollectFanoutInfo
-  Test #43: UtilTest.UtilTruthHexPrint
-  Test #44: UtilTest.UtilAddClauses
+  Test #40: AigCutTest.CutTreeCollect
+  Test #41: AigCutTest.CutLeavesSizeCollectReal
+  Test #42: AigCutTest.CutTruthSimTruth
+  Test #43: GiaTest.GiaCollectFanoutInfo
+  Test #44: UtilTest.UtilTruthHexPrint
+  Test #45: UtilTest.UtilAddClauses
 
-Total Tests: 44
+Total Tests: 45
 ```
 
 ### Truth table
@@ -178,6 +179,12 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 - `AigCutTest, CutLeavesSizeCollect` : Check the cut set difference when modifying the cut max leaf size.
 > [!NOTE]
 > Trivial cut is always the first one, which only contain the node itself. You will see the check in this example.
+
+- `AigCutTest, CutTreeCollect`: Collect tree cuts at a node. The case used in test is shown in the following figure.
+<p align="center">
+    <img src="./resources/images/TreeCut.png" width="300"/>
+</p>
+
 - `AigCutTest, CutLeavesSizeCollectReal` : Every node type should have cuts, even only a single trivial one.
 - `AigCutTest, CutTruthSimTruth` : Test the value of cut truth calculation, the result should be the same as `Abc_ManResubSimulate`'s results. (However, this is not always the case, by using `Abc_ManResubSimulate`, phase should also be considered.)
 <p align="center">
