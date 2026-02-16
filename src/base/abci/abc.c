@@ -35109,15 +35109,17 @@ usage:
 int Abc_CommandAbc9WriteVer( Abc_Frame_t * pAbc, int argc, char ** argv )
 {
     extern void Gia_WriteVerilog( char * pFileName, Gia_Man_t * pGia, int fUseGates, int fVerbose );
+    extern void Gia_WriteMappedVerilog( char * pFileName, Gia_Man_t * pGia, int fVerbose );
     char * pFileSpec = NULL;
     Abc_Ntk_t * pNtkSpec = NULL;
     char * pFileName;
     char ** pArgvNew;
     int c, nArgcNew;
     int fUseGates = 0;
+    int fUseLuts = 0;
     int fVerbose = 0;
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "Sgvh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "Sglvh" ) ) != EOF )
     {
         switch ( c )
         {
@@ -35132,6 +35134,9 @@ int Abc_CommandAbc9WriteVer( Abc_Frame_t * pAbc, int argc, char ** argv )
             break;
         case 'g':
             fUseGates ^= 1;
+            break;
+        case 'l':
+            fUseLuts ^= 1;
             break;
         case 'v':
             fVerbose ^= 1;
@@ -35157,7 +35162,21 @@ int Abc_CommandAbc9WriteVer( Abc_Frame_t * pAbc, int argc, char ** argv )
             Abc_Print( -1, "There is no AIG to write.\n" );
             return 1;
         }
-        Gia_WriteVerilog( pFileName, pAbc->pGia, fUseGates, fVerbose );
+        // Check if we should write LUT-based Verilog
+        if ( fUseLuts || (Gia_ManHasMapping(pAbc->pGia) && !fUseGates) )
+        {
+            if ( !Gia_ManHasMapping(pAbc->pGia) )
+            {
+                Abc_Print( -1, "Cannot write LUT-based Verilog because AIG is not mapped.\n" );
+                Abc_Print( -1, "Use \"&if\" to map the AIG first, or omit the -l flag.\n" );
+                return 1;
+            }
+            Gia_WriteMappedVerilog( pFileName, pAbc->pGia, fVerbose );
+        }
+        else
+        {
+            Gia_WriteVerilog( pFileName, pAbc->pGia, fUseGates, fVerbose );
+        }
     }
     else
     {
@@ -35179,13 +35198,15 @@ int Abc_CommandAbc9WriteVer( Abc_Frame_t * pAbc, int argc, char ** argv )
     return 0;
 
 usage:
-    Abc_Print( -2, "usage: &write_ver [-S <file>] [-gvh] <file>\n" );
+    Abc_Print( -2, "usage: &write_ver [-S <file>] [-glvh] <file>\n" );
     Abc_Print( -2, "\t          writes hierarchical Verilog\n" );
     Abc_Print( -2, "\t-S file : file name for the original design (required when hierarchy is present)\n" );
     Abc_Print( -2, "\t-g      : toggle output gates vs assign-statements [default = %s]\n", fUseGates? "gates": "assigns" );
+    Abc_Print( -2, "\t-l      : write LUT6-based Verilog for mapped AIGs [default = %s]\n", fUseLuts? "yes": "no" );
     Abc_Print( -2, "\t-v      : toggle verbose output [default = %s]\n", fVerbose? "yes": "no" );
     Abc_Print( -2, "\t-h      : print the command usage\n");
     Abc_Print( -2, "\t<file>  : the file name\n");
+    Abc_Print( -2, "\tNote: When AIG is mapped and -l is not specified, LUT-based output is automatically used.\n");
     return 1;
 }
 
