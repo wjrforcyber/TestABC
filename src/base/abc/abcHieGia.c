@@ -1333,6 +1333,7 @@ static void GiaHie_DumpMappedLuts( Gia_Man_t * p, char * pFileName )
     fprintf( pFile, "`timescale 1ns/1ps\n\n" );
 
     // Write LUT module definitions for Yosys compatibility (compact version)
+    fprintf( pFile, "`ifdef LUTSPECS\n" );
     fprintf( pFile, "module LUT2 #( parameter INIT = 04\'h0 ) ( output O, input I0, I1 );\n" );
     fprintf( pFile, "  assign O = INIT[ {I1, I0} ];\n" );
     fprintf( pFile, "endmodule\n" );
@@ -1351,7 +1352,8 @@ static void GiaHie_DumpMappedLuts( Gia_Man_t * p, char * pFileName )
 
     fprintf( pFile, "module LUT6 #( parameter INIT = 64\'h0 ) ( output O, input I0, I1, I2, I3, I4, I5 );\n" );
     fprintf( pFile, "  assign O = INIT[ {I5, I4, I3, I2, I1, I0} ];\n" );
-    fprintf( pFile, "endmodule\n\n" );
+    fprintf( pFile, "endmodule\n" );
+    fprintf( pFile, "`endif\n\n" );
 
     // Write main module
     fprintf( pFile, "module " );
