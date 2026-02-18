@@ -6905,7 +6905,7 @@ void Gia_ManDupSplit( Gia_Man_t * p, int nParts, int nCutLevel )
 
     // Create Part 0 (bottom part: levels 0 to Lcut)
     pPart0 = Gia_ManStart( Gia_ManObjNum(p) );
-    pFileName = Extra_FileNameGenericAppend( p->pSpec ? p->pSpec : "network.aig", "_part0" );
+    pFileName = Extra_FileNameGenericAppend( (char *)(p->pSpec ? p->pSpec : "network.aig"), "_part0" );
     pPart0->pName = Abc_UtilStrsav( pFileName );
     pPart0->pSpec = Abc_UtilStrsav( pFileName );
     Gia_ManFillValue( p );
@@ -6925,7 +6925,7 @@ void Gia_ManDupSplit( Gia_Man_t * p, int nParts, int nCutLevel )
     }
 
     // Write Part 0
-    pFileName = Extra_FileNameGenericAppend( p->pSpec ? p->pSpec : "network.aig", "_part0.aig" );
+    pFileName = Extra_FileNameGenericAppend( (char *)(p->pSpec ? p->pSpec : "network.aig"), "_part0.aig" );
     Gia_AigerWrite( pPart0, pFileName, 0, 0, 0 );
     printf( "Part 0: PI = %d, PO = %d, AND = %d, written to %s\n",
         Gia_ManCiNum(pPart0), Gia_ManCoNum(pPart0), Gia_ManAndNum(pPart0), pFileName );
@@ -6933,7 +6933,7 @@ void Gia_ManDupSplit( Gia_Man_t * p, int nParts, int nCutLevel )
 
     // Create Part 1 (top part: levels > Lcut)
     pPart1 = Gia_ManStart( Gia_ManObjNum(p) );
-    pFileName = Extra_FileNameGenericAppend( p->pSpec ? p->pSpec : "network.aig", "_part1" );
+    pFileName = Extra_FileNameGenericAppend( (char *)(p->pSpec ? p->pSpec : "network.aig"), "_part1" );
     pPart1->pName = Abc_UtilStrsav( pFileName );
     pPart1->pSpec = Abc_UtilStrsav( pFileName );
     Gia_ManFillValue( p );
@@ -6953,7 +6953,7 @@ void Gia_ManDupSplit( Gia_Man_t * p, int nParts, int nCutLevel )
     }
 
     // Write Part 1
-    pFileName = Extra_FileNameGenericAppend( p->pSpec ? p->pSpec : "network.aig", "_part1.aig" );
+    pFileName = Extra_FileNameGenericAppend( (char *)(p->pSpec ? p->pSpec : "network.aig"), "_part1.aig" );
     Gia_AigerWrite( pPart1, pFileName, 0, 0, 0 );
     printf( "Part 1: PI = %d, PO = %d, AND = %d, written to %s\n",
         Gia_ManCiNum(pPart1), Gia_ManCoNum(pPart1), Gia_ManAndNum(pPart1), pFileName );
