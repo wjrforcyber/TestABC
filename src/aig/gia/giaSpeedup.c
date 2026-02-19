@@ -333,6 +333,32 @@ float Gia_ManDelayTraceLut( Gia_Man_t * p )
         Gia_ObjSetTimeArrival( p, i, tArrival );
     }
 
+    // update levels of box output CIs to reflect box structure
+    // (Gia_ManLevelNum assigns level 0 to all CIs, but box output CIs
+    // need higher levels so that Gia_ManOrderReverse processes them
+    // before box input COs during the backward required-time pass)
+    if ( p->pManTime )
+    {
+        Tim_Man_t * pManTime = (Tim_Man_t *)p->pManTime;
+        int iBox, nBoxes = Tim_ManBoxNum( pManTime );
+        for ( iBox = 0; iBox < nBoxes; iBox++ )
+        {
+            int nIns  = Tim_ManBoxInputNum( pManTime, iBox );
+            int nOuts = Tim_ManBoxOutputNum( pManTime, iBox );
+            int iCoFirst = Tim_ManBoxInputFirst( pManTime, iBox );
+            int iCiFirst = Tim_ManBoxOutputFirst( pManTime, iBox );
+            int j, maxLevel = 0;
+            for ( j = 0; j < nIns; j++ )
+            {
+                int coLevel = Gia_ObjLevel( p, Gia_ManCo(p, iCoFirst + j) );
+                if ( coLevel > maxLevel )
+                    maxLevel = coLevel;
+            }
+            for ( j = 0; j < nOuts; j++ )
+                Gia_ObjSetLevel( p, Gia_ManCi(p, iCiFirst + j), maxLevel + 1 );
+        }
+    }
+
     // get the latest arrival times
     tArrival = -TIM_ETERNITY;
     Gia_ManForEachCo( p, pObj, i )
