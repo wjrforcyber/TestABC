@@ -249,7 +249,7 @@ float Tim_ManGetCoRequired( Tim_Man_t * p, int iCo )
         Tim_ManBoxForEachOutput( p, pBox, pObj, k )
         {
             pDelays = pTable + 3 + k * pBox->nInputs;
-            if ( pDelays[k] != -ABC_INFINITY )
+            if ( pDelays[i] != -ABC_INFINITY )
                 DelayBest = Abc_MinFloat( DelayBest, pObj->timeReq - pDelays[i] );
         }
         pObjRes->timeReq = DelayBest;
