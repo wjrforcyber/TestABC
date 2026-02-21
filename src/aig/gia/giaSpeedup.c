@@ -350,7 +350,7 @@ float Gia_ManDelayTraceLut( Gia_Man_t * p )
             int j, maxLevel = 0;
             for ( j = 0; j < nIns; j++ )
             {
-                int coLevel = Gia_ObjLevel( p, Gia_ManCo(p, iCoFirst + j) );
+                int coLevel = Gia_ObjLevel( p, Gia_ObjFanin0(Gia_ManCo(p, iCoFirst + j)) );
                 if ( coLevel > maxLevel )
                     maxLevel = coLevel;
             }
