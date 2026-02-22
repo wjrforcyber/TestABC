@@ -209,6 +209,9 @@ float Gia_ObjPropagateRequired( Gia_Man_t * p, int iObj, int fUseSorting )
     float tRequired = 0.0; // Suppress "might be used uninitialized"
     float * pDelays;
     assert( Gia_ObjIsLut(p, iObj) );
+    // Infinity propagates unchanged
+    if ( Gia_ObjTimeRequired( p, iObj ) >= TIM_ETERNITY )
+        return TIM_ETERNITY;
     if ( pLutLib == NULL && pCellLib == NULL )
     {
         tRequired = Gia_ObjTimeRequired( p, iObj) - (float)1.0;
@@ -407,9 +410,11 @@ float Gia_ManDelayTraceLut( Gia_Man_t * p )
         }
 
         // set slack for this object
-        tSlack = Gia_ObjTimeRequired(p, iObj) - Gia_ObjTimeArrival(p, iObj);
-        assert( tSlack + 0.01 > 0.0 );
-        Gia_ObjSetTimeSlack( p, iObj, tSlack < 0.0 ? 0.0 : tSlack );
+        if ( Gia_ObjTimeRequired(p, iObj) >= TIM_ETERNITY )
+            tSlack = TIM_ETERNITY;
+        else
+            tSlack = Gia_ObjTimeRequired(p, iObj) - Gia_ObjTimeArrival(p, iObj);
+        Gia_ObjSetTimeSlack( p, iObj, tSlack );
     }
     Vec_IntFree( vObjs );
     return tArrival;
