@@ -1,4 +1,4 @@
-add_executable(aig aig.cc aigCut.cc aigDup.cc aigLevel.cc aigResub.cc)
+add_executable(aig aig.cc aigCut.cc aigDup.cc aigLevel.cc aigResub.cc aigChoice.cc)
 
 add_compile_definitions(PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}")
 target_compile_definitions(aig PRIVATE PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}")
