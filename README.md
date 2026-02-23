@@ -70,17 +70,19 @@ This section will include all the tests and test suite. Current tests:
   Test #34: AigTest.ReverseLevelAig
   Test #35: AigTest.ResubAig
   Test #36: AigTest.ResubSingleNodeAig
-  Test #37: AigCutTest.CutTruthVarNumAig
-  Test #38: AigCutTest.CutCollect
-  Test #39: AigCutTest.CutLeavesSizeCollect
-  Test #40: AigCutTest.CutTreeCollect
-  Test #41: AigCutTest.CutLeavesSizeCollectReal
-  Test #42: AigCutTest.CutTruthSimTruth
-  Test #43: GiaTest.GiaCollectFanoutInfo
-  Test #44: UtilTest.UtilTruthHexPrint
-  Test #45: UtilTest.UtilAddClauses
+  Test #37: AigTest.ChoiceXORNoChoice
+  Test #38: AigTest.ChoiceXORChoice
+  Test #39: AigCutTest.CutTruthVarNumAig
+  Test #40: AigCutTest.CutCollect
+  Test #41: AigCutTest.CutLeavesSizeCollect
+  Test #42: AigCutTest.CutTreeCollect
+  Test #43: AigCutTest.CutLeavesSizeCollectReal
+  Test #44: AigCutTest.CutTruthSimTruth
+  Test #45: GiaTest.GiaCollectFanoutInfo
+  Test #46: UtilTest.UtilTruthHexPrint
+  Test #47: UtilTest.UtilAddClauses
 
-Total Tests: 45
+Total Tests: 47
 ```
 
 ### Truth table
@@ -157,6 +159,10 @@ This interface works as follows, the `k >> 6` means `k` divides 64, `k & 63` mea
 <br> The majority function is self-dual $f = xy \lor yz \lor zx$, $f^d = \overline{(\bar{x} \bar{y} \lor \bar{y} \bar{z} \lor \bar{z} \bar{x})}$, $f = f^d$.
 
 - `AigTest, CollectSingleAndAig` : Collecting nodes using DFS on a single target node on AIG.
+
+- `AigTest, ChoiceXORNoChoice` : Take XOR case (a) and case (b) as an example (in case `AigTest, IsXORAig`), they won't create choices since they are hashed to be the same. This is actually a structural hash experiment.
+
+- `AigTest, ChoiceXORChoice` : Manually construct a choice network. Take XOR case (a) and case (c) as an example (in case `AigTest, IsXORAig`).
 
 ### Gia
 - `GiaTest, GiaCollectFanoutInfo` : Standard process on collecting fanout information.
