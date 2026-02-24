@@ -22,179 +22,38 @@ jobs:
       with:
         arch: x86
 
-    - name: Generate solution and project files from dsp
+    - name: Copy project files from scripts
+      run: |
+        copy .github\scripts\abcspace.sln .
+        copy .github\scripts\abcexe.vcxproj .
+
+    - name: Generate abclib.vcxproj from dsp
       shell: powershell
       run: |
         # Parse source files from abclib.dsp
         $dspContent = Get-Content "abclib.dsp" -Raw
-        # Match SOURCE=. followed by path (e.g., SOURCE=.\src\base\abc\abc.c)
-        # Capture the path without the leading backslash
         $sourceFiles = [regex]::Matches($dspContent, 'SOURCE=\.\\([^\r\n]+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
         
         Write-Host "Found $($sourceFiles.Count) source files"
         
-        # Create the solution file (use tabs for indentation)
-        $slnContent = "Microsoft Visual Studio Solution File, Format Version 12.00`r`n"
-        $slnContent += "VisualStudioVersion = 17.0.31903.59`r`n"
-        $slnContent += "MinimumVisualStudioVersion = 10.0.40219.1`r`n"
-        $slnContent += 'Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "abclib", "abclib.vcxproj", "{6B6D7E0F-1234-4567-89AB-CDEF01234567}"' + "`r`n"
-        $slnContent += "EndProject`r`n"
-        $slnContent += 'Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "abcexe", "abcexe.vcxproj", "{6B6D7E0F-1234-4567-89AB-CDEF01234568}"' + "`r`n"
-        $slnContent += "`tProjectSection(ProjectDependencies) = postProject`r`n"
-        $slnContent += "`t`t{6B6D7E0F-1234-4567-89AB-CDEF01234567} = {6B6D7E0F-1234-4567-89AB-CDEF01234567}`r`n"
-        $slnContent += "`tEndProjectSection`r`n"
-        $slnContent += "EndProject`r`n"
-        $slnContent += "Global`r`n"
-        $slnContent += "`tGlobalSection(SolutionConfigurationPlatforms) = preSolution`r`n"
-        $slnContent += "`t`tRelease|Win32 = Release|Win32`r`n"
-        $slnContent += "`tEndGlobalSection`r`n"
-        $slnContent += "`tGlobalSection(ProjectConfigurationPlatforms) = postSolution`r`n"
-        $slnContent += "`t`t{6B6D7E0F-1234-4567-89AB-CDEF01234567}.Release|Win32.ActiveCfg = Release|Win32`r`n"
-        $slnContent += "`t`t{6B6D7E0F-1234-4567-89AB-CDEF01234567}.Release|Win32.Build.0 = Release|Win32`r`n"
-        $slnContent += "`t`t{6B6D7E0F-1234-4567-89AB-CDEF01234568}.Release|Win32.ActiveCfg = Release|Win32`r`n"
-        $slnContent += "`t`t{6B6D7E0F-1234-4567-89AB-CDEF01234568}.Release|Win32.Build.0 = Release|Win32`r`n"
-        $slnContent += "`tEndGlobalSection`r`n"
-        $slnContent += "EndGlobal`r`n"
-        Set-Content "abcspace.sln" $slnContent -NoNewline
-        
-        # Build source file items for vcxproj
-        # Separate .c and .cpp files - .c files compile as C, .cpp files compile as C++
-        $cCompileItems = ""
-        $cppCompileItems = ""
-        $clIncludeItems = ""
+        # Build source file items
+        $sourceItems = ""
         foreach ($src in $sourceFiles) {
             if ($src -match '\.c$') {
-                $cCompileItems += "    <ClCompile Include=`"$src`" />`r`n"
+                $sourceItems += "    <ClCompile Include=`"$src`" />`r`n"
             } elseif ($src -match '\.(cpp|cc)$') {
-                $cppCompileItems += "    <ClCompile Include=`"$src`" />`r`n"
+                $sourceItems += "    <ClCompile Include=`"$src`" />`r`n"
             } elseif ($src -match '\.h$') {
-                $clIncludeItems += "    <ClInclude Include=`"$src`" />`r`n"
+                $sourceItems += "    <ClInclude Include=`"$src`" />`r`n"
             }
         }
         
-        # Create abclib.vcxproj (static library)
-        $libVcxproj = '<?xml version="1.0" encoding="utf-8"?>' + "`r`n"
-        $libVcxproj += '<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">' + "`r`n"
-        $libVcxproj += '  <ItemGroup Label="ProjectConfigurations">' + "`r`n"
-        $libVcxproj += '    <ProjectConfiguration Include="Release|Win32">' + "`r`n"
-        $libVcxproj += '      <Configuration>Release</Configuration>' + "`r`n"
-        $libVcxproj += '      <Platform>Win32</Platform>' + "`r`n"
-        $libVcxproj += '    </ProjectConfiguration>' + "`r`n"
-        $libVcxproj += '  </ItemGroup>' + "`r`n"
-        $libVcxproj += '  <PropertyGroup Label="Globals">' + "`r`n"
-        $libVcxproj += '    <VCProjectVersion>17.0</VCProjectVersion>' + "`r`n"
-        $libVcxproj += '    <ProjectGuid>{6B6D7E0F-1234-4567-89AB-CDEF01234567}</ProjectGuid>' + "`r`n"
-        $libVcxproj += '    <Keyword>Win32Proj</Keyword>' + "`r`n"
-        $libVcxproj += '    <RootNamespace>abclib</RootNamespace>' + "`r`n"
-        $libVcxproj += '  </PropertyGroup>' + "`r`n"
-        $libVcxproj += '  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />' + "`r`n"
-        $libVcxproj += '  <PropertyGroup Condition="''$(Configuration)|$(Platform)''==''Release|Win32''" Label="Configuration">' + "`r`n"
-        $libVcxproj += '    <ConfigurationType>StaticLibrary</ConfigurationType>' + "`r`n"
-        $libVcxproj += '    <UseDebugLibraries>false</UseDebugLibraries>' + "`r`n"
-        $libVcxproj += '    <PlatformToolset>v143</PlatformToolset>' + "`r`n"
-        $libVcxproj += '    <WholeProgramOptimization>true</WholeProgramOptimization>' + "`r`n"
-        $libVcxproj += '    <CharacterSet>MultiByte</CharacterSet>' + "`r`n"
-        $libVcxproj += '  </PropertyGroup>' + "`r`n"
-        $libVcxproj += '  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />' + "`r`n"
-        $libVcxproj += '  <ImportGroup Label="PropertySheets" Condition="''$(Configuration)|$(Platform)''==''Release|Win32''">' + "`r`n"
-        $libVcxproj += '    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists(''$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props'')" Label="LocalAppDataPlatform" />' + "`r`n"
-        $libVcxproj += '  </ImportGroup>' + "`r`n"
-        $libVcxproj += '  <PropertyGroup Condition="''$(Configuration)|$(Platform)''==''Release|Win32''">' + "`r`n"
-        $libVcxproj += '    <OutDir>lib\</OutDir>' + "`r`n"
-        $libVcxproj += '    <IntDir>ReleaseLib\</IntDir>' + "`r`n"
-        $libVcxproj += '  </PropertyGroup>' + "`r`n"
-        $libVcxproj += '  <ItemDefinitionGroup Condition="''$(Configuration)|$(Platform)''==''Release|Win32''">' + "`r`n"
-        $libVcxproj += '    <ClCompile>' + "`r`n"
-        $libVcxproj += '      <WarningLevel>Level3</WarningLevel>' + "`r`n"
-        $libVcxproj += '      <DisableSpecificWarnings>4146;4334;4996;4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>' + "`r`n"
-        $libVcxproj += '      <FunctionLevelLinking>true</FunctionLevelLinking>' + "`r`n"
-        $libVcxproj += '      <IntrinsicFunctions>true</IntrinsicFunctions>' + "`r`n"
-        $libVcxproj += '      <SDLCheck>true</SDLCheck>' + "`r`n"
-        $libVcxproj += '      <PreprocessorDefinitions>WIN32;WINDOWS;NDEBUG;_LIB;ABC_DLL=ABC_DLLEXPORT;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_WARNINGS;ABC_USE_PTHREADS;ABC_USE_CUDD;HAVE_STRUCT_TIMESPEC;_WINSOCKAPI_;%(PreprocessorDefinitions)</PreprocessorDefinitions>' + "`r`n"
-        $libVcxproj += '      <ConformanceMode>true</ConformanceMode>' + "`r`n"
-        $libVcxproj += '      <LanguageStandard>stdcpp17</LanguageStandard>' + "`r`n"
-        $libVcxproj += '      <AdditionalIncludeDirectories>src</AdditionalIncludeDirectories>' + "`r`n"
-        $libVcxproj += '      <AdditionalOptions>/Zc:strictStrings- %(AdditionalOptions)</AdditionalOptions>' + "`r`n"
-        $libVcxproj += '    </ClCompile>' + "`r`n"
-        $libVcxproj += '    <Lib>' + "`r`n"
-        $libVcxproj += '      <OutputFile>$(OutDir)abcr.lib</OutputFile>' + "`r`n"
-        $libVcxproj += '    </Lib>' + "`r`n"
-        $libVcxproj += '  </ItemDefinitionGroup>' + "`r`n"
-        $libVcxproj += '  <ItemGroup>' + "`r`n"
-        $libVcxproj += $cCompileItems
-        $libVcxproj += $cppCompileItems
-        $libVcxproj += $clIncludeItems
-        $libVcxproj += '  </ItemGroup>' + "`r`n"
-        $libVcxproj += '  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />' + "`r`n"
-        $libVcxproj += '</Project>' + "`r`n"
-        Set-Content "abclib.vcxproj" $libVcxproj -NoNewline
+        # Read template and replace placeholder
+        $template = Get-Content ".github\scripts\abclib.vcxproj.template" -Raw
+        $vcxproj = $template -replace '\{\{SOURCE_FILES\}\}', $sourceItems
+        Set-Content "abclib.vcxproj" $vcxproj -NoNewline
         
-        # Create abcexe.vcxproj (executable)
-        $exeVcxproj = '<?xml version="1.0" encoding="utf-8"?>' + "`r`n"
-        $exeVcxproj += '<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">' + "`r`n"
-        $exeVcxproj += '  <ItemGroup Label="ProjectConfigurations">' + "`r`n"
-        $exeVcxproj += '    <ProjectConfiguration Include="Release|Win32">' + "`r`n"
-        $exeVcxproj += '      <Configuration>Release</Configuration>' + "`r`n"
-        $exeVcxproj += '      <Platform>Win32</Platform>' + "`r`n"
-        $exeVcxproj += '    </ProjectConfiguration>' + "`r`n"
-        $exeVcxproj += '  </ItemGroup>' + "`r`n"
-        $exeVcxproj += '  <PropertyGroup Label="Globals">' + "`r`n"
-        $exeVcxproj += '    <VCProjectVersion>17.0</VCProjectVersion>' + "`r`n"
-        $exeVcxproj += '    <ProjectGuid>{6B6D7E0F-1234-4567-89AB-CDEF01234568}</ProjectGuid>' + "`r`n"
-        $exeVcxproj += '    <Keyword>Win32Proj</Keyword>' + "`r`n"
-        $exeVcxproj += '    <RootNamespace>abcexe</RootNamespace>' + "`r`n"
-        $exeVcxproj += '    <TargetName>abc</TargetName>' + "`r`n"
-        $exeVcxproj += '  </PropertyGroup>' + "`r`n"
-        $exeVcxproj += '  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />' + "`r`n"
-        $exeVcxproj += '  <PropertyGroup Condition="''$(Configuration)|$(Platform)''==''Release|Win32''" Label="Configuration">' + "`r`n"
-        $exeVcxproj += '    <ConfigurationType>Application</ConfigurationType>' + "`r`n"
-        $exeVcxproj += '    <UseDebugLibraries>false</UseDebugLibraries>' + "`r`n"
-        $exeVcxproj += '    <PlatformToolset>v143</PlatformToolset>' + "`r`n"
-        $exeVcxproj += '    <WholeProgramOptimization>true</WholeProgramOptimization>' + "`r`n"
-        $exeVcxproj += '    <CharacterSet>MultiByte</CharacterSet>' + "`r`n"
-        $exeVcxproj += '  </PropertyGroup>' + "`r`n"
-        $exeVcxproj += '  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />' + "`r`n"
-        $exeVcxproj += '  <ImportGroup Label="PropertySheets" Condition="''$(Configuration)|$(Platform)''==''Release|Win32''">' + "`r`n"
-        $exeVcxproj += '    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists(''$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props'')" Label="LocalAppDataPlatform" />' + "`r`n"
-        $exeVcxproj += '  </ImportGroup>' + "`r`n"
-        $exeVcxproj += '  <PropertyGroup Condition="''$(Configuration)|$(Platform)''==''Release|Win32''">' + "`r`n"
-        $exeVcxproj += '    <OutDir>_TEST\</OutDir>' + "`r`n"
-        $exeVcxproj += '    <IntDir>ReleaseExe\</IntDir>' + "`r`n"
-        $exeVcxproj += '  </PropertyGroup>' + "`r`n"
-        $exeVcxproj += '  <ItemDefinitionGroup Condition="''$(Configuration)|$(Platform)''==''Release|Win32''">' + "`r`n"
-        $exeVcxproj += '    <ClCompile>' + "`r`n"
-        $exeVcxproj += '      <WarningLevel>Level3</WarningLevel>' + "`r`n"
-        $exeVcxproj += '      <DisableSpecificWarnings>4146;4334;4996;4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>' + "`r`n"
-        $exeVcxproj += '      <FunctionLevelLinking>true</FunctionLevelLinking>' + "`r`n"
-        $exeVcxproj += '      <IntrinsicFunctions>true</IntrinsicFunctions>' + "`r`n"
-        $exeVcxproj += '      <SDLCheck>true</SDLCheck>' + "`r`n"
-        $exeVcxproj += '      <PreprocessorDefinitions>WIN32;WINDOWS;NDEBUG;_CONSOLE;ABC_DLL=ABC_DLLEXPORT;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_WARNINGS;ABC_USE_PTHREADS;ABC_USE_CUDD;HAVE_STRUCT_TIMESPEC;_WINSOCKAPI_;%(PreprocessorDefinitions)</PreprocessorDefinitions>' + "`r`n"
-        $exeVcxproj += '      <ConformanceMode>true</ConformanceMode>' + "`r`n"
-        $exeVcxproj += '      <LanguageStandard>stdcpp17</LanguageStandard>' + "`r`n"
-        $exeVcxproj += '      <AdditionalIncludeDirectories>src</AdditionalIncludeDirectories>' + "`r`n"
-        $exeVcxproj += '      <AdditionalOptions>/Zc:strictStrings- %(AdditionalOptions)</AdditionalOptions>' + "`r`n"
-        $exeVcxproj += '    </ClCompile>' + "`r`n"
-        $exeVcxproj += '    <Link>' + "`r`n"
-        $exeVcxproj += '      <SubSystem>Console</SubSystem>' + "`r`n"
-        $exeVcxproj += '      <EnableCOMDATFolding>true</EnableCOMDATFolding>' + "`r`n"
-        $exeVcxproj += '      <OptimizeReferences>true</OptimizeReferences>' + "`r`n"
-        $exeVcxproj += '      <GenerateDebugInformation>true</GenerateDebugInformation>' + "`r`n"
-        $exeVcxproj += '      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;lib\x86\pthreadVC2.lib;%(AdditionalDependencies)</AdditionalDependencies>' + "`r`n"
-        $exeVcxproj += '    </Link>' + "`r`n"
-        $exeVcxproj += '  </ItemDefinitionGroup>' + "`r`n"
-        $exeVcxproj += '  <ItemGroup>' + "`r`n"
-        $exeVcxproj += '    <ClCompile Include="src\base\main\main.c" />' + "`r`n"
-        $exeVcxproj += '  </ItemGroup>' + "`r`n"
-        $exeVcxproj += '  <ItemGroup>' + "`r`n"
-        $exeVcxproj += '    <ProjectReference Include="abclib.vcxproj">' + "`r`n"
-        $exeVcxproj += '      <Project>{6B6D7E0F-1234-4567-89AB-CDEF01234567}</Project>' + "`r`n"
-        $exeVcxproj += '    </ProjectReference>' + "`r`n"
-        $exeVcxproj += '  </ItemGroup>' + "`r`n"
-        $exeVcxproj += '  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />' + "`r`n"
-        $exeVcxproj += '</Project>' + "`r`n"
-        Set-Content "abcexe.vcxproj" $exeVcxproj -NoNewline
-        
-        Write-Host "Project files generated successfully"
+        Write-Host "abclib.vcxproj generated successfully"
 
     - name: Build
       run: |
