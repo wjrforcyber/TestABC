@@ -306,7 +306,9 @@ int Cec_GiaProveOne( Gia_Man_t * p, int iEngine, int nTimeOut, int fVerbose, Par
 }
 Gia_Man_t * Cec_GiaScorrOld( Gia_Man_t * p, int nTimeOut, Par_Share_t * pShare )
 {
-    Cec_ScorrStop_t Stop = { pShare, nTimeOut > 0 ? Abc_Clock() + (abctime)nTimeOut * CLOCKS_PER_SEC : 0 };
+    Cec_ScorrStop_t Stop;
+    Stop.pShare = pShare;
+    Stop.TimeToStop = nTimeOut > 0 ? (abctime)(Abc_Clock() + (abctime)nTimeOut * CLOCKS_PER_SEC) : 0;
     if ( Gia_ManRegNum(p) == 0 )
         return Gia_ManDup( p );
     Ssw_Pars_t Pars, * pPars = &Pars;
@@ -322,7 +324,9 @@ Gia_Man_t * Cec_GiaScorrOld( Gia_Man_t * p, int nTimeOut, Par_Share_t * pShare )
 }
 Gia_Man_t * Cec_GiaScorrNew( Gia_Man_t * p, int nTimeOut, Par_Share_t * pShare )
 {
-    Cec_ScorrStop_t Stop = { pShare, nTimeOut > 0 ? Abc_Clock() + (abctime)nTimeOut * CLOCKS_PER_SEC : 0 };
+    Cec_ScorrStop_t Stop;
+    Stop.pShare = pShare;
+    Stop.TimeToStop = nTimeOut > 0 ? (abctime)(Abc_Clock() + (abctime)nTimeOut * CLOCKS_PER_SEC) : 0;
     if ( Gia_ManRegNum(p) == 0 )
         return Gia_ManDup( p );
     Cec_ParCor_t Pars, * pPars = &Pars;
