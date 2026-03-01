@@ -82,8 +82,21 @@ This section will include all the tests and test suite. Current tests:
   Test #46: UtilTest.UtilTruthHexPrint
   Test #47: UtilTest.UtilAddClauses
 
-Total Tests: 47
+  Test #48: SopTest.SopStart
+  Test #49: SopTest.SopRegister
+  Test #50: SopTest.SopCreateFromTruth
+  Test #51: SopTest.SopCreateFromIsop
+  Test #52: SopTest.SopCreateFromTruthIsop
+
+Total Tests: 52
 ```
+
+### SOP
+- `SopTest, SopStart` : Creates an uninitialized SOP cover with `nCubes` and `nVars`. All literals are initialized to `'-'` (don't-care) and all outputs to `'1'` (on-set).
+- `SopTest, SopRegister` : Registers (copies) a SOP string into the memory manager. Returns NULL if input is NULL.
+- `SopTest, SopCreateFromTruth` : Creates SOP from truth table (minterm-level, no minimization). Each cube represents one true minterm. Uses 32-bit unsigned array format.
+- `SopTest, SopCreateFromIsop` : Creates SOP from ISOP (Irredundant Sum-of-Products) cover representation. ISOP uses 2 bits per variable: `00`=don't-care, `01`=0, `10`=1.
+- `SopTest, SopCreateFromTruthIsop` : Creates minimized SOP from truth table using ISOP algorithm. Uses 64-bit word array format. Handles constant 0/1 specially.
 
 ### Truth table
 - `TTTest, ReadTT` : Show the direct interface on reading truth table into abc.
