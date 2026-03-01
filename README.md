@@ -81,14 +81,15 @@ This section will include all the tests and test suite. Current tests:
   Test #45: GiaTest.GiaCollectFanoutInfo
   Test #46: UtilTest.UtilTruthHexPrint
   Test #47: UtilTest.UtilAddClauses
-
   Test #48: SopTest.SopStart
   Test #49: SopTest.SopRegister
   Test #50: SopTest.SopCreateFromTruth
   Test #51: SopTest.SopCreateFromIsop
   Test #52: SopTest.SopCreateFromTruthIsop
+  Test #53: SopTest.SopCreateXorSpecial
+  Test #54: SopTest.SopCheck
 
-Total Tests: 52
+Total Tests: 54
 ```
 
 ### SOP
@@ -97,6 +98,8 @@ Total Tests: 52
 - `SopTest, SopCreateFromTruth` : Creates SOP from truth table (minterm-level, no minimization). Each cube represents one true minterm. Uses 32-bit unsigned array format.
 - `SopTest, SopCreateFromIsop` : Creates SOP from ISOP (Irredundant Sum-of-Products) cover representation. ISOP uses 2 bits per variable: `00`=don't-care, `01`=0, `10`=1.
 - `SopTest, SopCreateFromTruthIsop` : Creates minimized SOP from truth table using ISOP algorithm. Uses 64-bit word array format. Handles constant 0/1 specially.
+- `SopTest, SopCreateXorSpecial` : Creates compact XOR representation using 'x' marker. For 2-input XOR, produces "11 x\n" instead of explicit cubes. ABC's internal optimization for XOR detection.
+- `SopTest, SopCheck` : Validates SOP string integrity. Checks: (1) cube size matches fanin count, (2) valid output chars ('0','1','x','n'), (3) proper newlines, (4) consistent phase (no mixed on-set/off-set).
 
 ### Truth table
 - `TTTest, ReadTT` : Show the direct interface on reading truth table into abc.

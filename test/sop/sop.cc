@@ -337,4 +337,157 @@ TEST(SopTest, SopCreateFromTruthIsop) {
     Mem_FlexStop(pMan, 0);
 }
 
+/*!
+  \brief Test Abc_SopCreateXorSpecial: creates compact XOR representation.
+
+  Uses special 'x' marker instead of explicit cubes.
+  - Creates AND-style cover with 'x' output marker
+  - Supports multi-input XOR (unlike Abc_SopCreateXor which only supports 2 vars)
+  - Detected by Abc_SopIsExorType()
+*/
+TEST(SopTest, SopCreateXorSpecial) {
+    Mem_Flex_t * pMan = Mem_FlexStart();
+
+    // Test case 1: 2-input XOR special
+    // Expected: "11 x\n"
+    {
+        int nVars = 2;
+        char * pSop = Abc_SopCreateXorSpecial(pMan, nVars);
+        EXPECT_TRUE(pSop != NULL);
+        EXPECT_EQ(Abc_SopGetVarNum(pSop), nVars);
+        EXPECT_EQ(Abc_SopGetCubeNum(pSop), 1);
+        // Check structure: literals are all '1', output is 'x'
+        EXPECT_EQ(pSop[0], '1');   // var0
+        EXPECT_EQ(pSop[1], '1');   // var1
+        EXPECT_EQ(pSop[2], ' ');   // space
+        EXPECT_EQ(pSop[3], 'x');   // XOR marker (not '1')
+        EXPECT_EQ(pSop[4], '\n');  // newline
+        // Verify it's detected as XOR type
+        EXPECT_TRUE(Abc_SopIsExorType(pSop));
+    }
+
+    // Test case 2: 3-input XOR special
+    // Expected: "111 x\n"
+    {
+        int nVars = 3;
+        char * pSop = Abc_SopCreateXorSpecial(pMan, nVars);
+        EXPECT_TRUE(pSop != NULL);
+        EXPECT_EQ(Abc_SopGetVarNum(pSop), nVars);
+        EXPECT_EQ(Abc_SopGetCubeNum(pSop), 1);
+        EXPECT_EQ(pSop[0], '1');
+        EXPECT_EQ(pSop[1], '1');
+        EXPECT_EQ(pSop[2], '1');
+        EXPECT_EQ(pSop[4], 'x');  // output position: nVars + 1
+        EXPECT_TRUE(Abc_SopIsExorType(pSop));
+    }
+
+    // Test case 3: 4-input XOR special
+    {
+        int nVars = 4;
+        char * pSop = Abc_SopCreateXorSpecial(pMan, nVars);
+        EXPECT_TRUE(pSop != NULL);
+        EXPECT_EQ(Abc_SopGetVarNum(pSop), nVars);
+        EXPECT_TRUE(Abc_SopIsExorType(pSop));
+        // Verify all literals are '1'
+        for (int i = 0; i < nVars; i++) {
+            EXPECT_EQ(pSop[i], '1');
+        }
+        // Verify output is 'x'
+        EXPECT_EQ(pSop[nVars + 1], 'x');
+    }
+
+    Mem_FlexStop(pMan, 0);
+}
+
+/*!
+  \brief Test Abc_SopCheck: validates integrity of a SOP string.
+
+  The function checks:
+  1. Each cube has exactly nFanins literals (before the space)
+  2. Output char is one of: '0', '1', 'x', 'n'
+  3. Each cube ends with newline
+  4. All cubes are in the same phase (no mix of '0' and '1' outputs)
+  
+  Returns 1 if valid, 0 if invalid (prints error message).
+*/
+TEST(SopTest, SopCheck) {
+    Mem_Flex_t * pMan = Mem_FlexStart();
+
+    // Test case 1: Valid 2-input AND SOP
+    {
+        char * pSop = Abc_SopRegister(pMan, "11 1\n");
+        EXPECT_TRUE(Abc_SopCheck(pSop, 2));
+    }
+
+    // Test case 2: Valid 2-input OR SOP (multiple cubes)
+    {
+        char * pSop = Abc_SopRegister(pMan, "01 1\n10 1\n11 1\n");
+        EXPECT_TRUE(Abc_SopCheck(pSop, 2));
+    }
+
+    // Test case 3: Valid 3-input function
+    {
+        char * pSop = Abc_SopRegister(pMan, "11- 1\n0-1 1\n");
+        EXPECT_TRUE(Abc_SopCheck(pSop, 3));
+    }
+
+    // Test case 4: Valid XOR special format (output 'x')
+    {
+        char * pSop = Abc_SopRegister(pMan, "11 x\n");
+        EXPECT_TRUE(Abc_SopCheck(pSop, 2));
+    }
+
+    // Test case 5: Valid constant 0 (off-set)
+    {
+        char * pSop = Abc_SopRegister(pMan, " 0\n");
+        EXPECT_TRUE(Abc_SopCheck(pSop, 0));
+    }
+
+    // Test case 6: Valid constant 1 (on-set)
+    {
+        char * pSop = Abc_SopRegister(pMan, " 1\n");
+        EXPECT_TRUE(Abc_SopCheck(pSop, 0));
+    }
+
+    // Test case 7: Wrong number of literals (cube size mismatch)
+    {
+        char * pSop = Abc_SopRegister(pMan, "111 1\n");  // 3 literals but nFanins=2
+        EXPECT_FALSE(Abc_SopCheck(pSop, 2));
+    }
+
+    // Test case 8: Invalid output character
+    {
+        char * pSop = Abc_SopRegister(pMan, "11 2\n");  // '2' is invalid
+        EXPECT_FALSE(Abc_SopCheck(pSop, 2));
+    }
+
+    // Test case 9: Missing newline at end of cube
+    {
+        // This would need manual construction since Abc_SopRegister copies properly
+        // We create a malformed SOP manually
+        char pSop[] = "11 1";  // Missing newline
+        EXPECT_FALSE(Abc_SopCheck(pSop, 2));
+    }
+
+    // Test case 10: Mixed phases (both '0' and '1' outputs)
+    {
+        char * pSop = Abc_SopRegister(pMan, "11 1\n00 0\n");  // Mixed on-set and off-set
+        EXPECT_FALSE(Abc_SopCheck(pSop, 2));
+    }
+
+    // Test case 11: Valid buffer
+    {
+        char * pSop = Abc_SopRegister(pMan, "1 1\n");
+        EXPECT_TRUE(Abc_SopCheck(pSop, 1));
+    }
+
+    // Test case 12: Valid inverter (off-set with single literal)
+    {
+        char * pSop = Abc_SopRegister(pMan, "1 0\n");
+        EXPECT_TRUE(Abc_SopCheck(pSop, 1));
+    }
+
+    Mem_FlexStop(pMan, 0);
+}
+
 ABC_NAMESPACE_IMPL_END

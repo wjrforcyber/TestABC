@@ -824,7 +824,7 @@ TEST(AigTest, CollectSingleAndAig) {
     Abc_Ntk_t * pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
     int nInputs = 6;
     int nOutputs = 1;
-    int i = 0, k = 0;
+    int i = 0;
     Abc_Obj_t * pObj;
     // create the PIs
     for ( i = 0; i < nInputs; i++ )
