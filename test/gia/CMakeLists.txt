@@ -1,4 +1,4 @@
-add_executable(gia gia.cc giaSingleOperation.cc giaSamplesSweeping.cc)
+add_executable(gia gia.cc giaSingleOperation.cc giaSamplesSweeping.cc giaCut.cc)
 
 target_link_libraries(gia
     gtest_main
