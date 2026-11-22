@@ -526,7 +526,7 @@ private:
     STT tt = start_tt;
 
     /* init combinations */
-    uint32_t pComb[11], pInvPerm[11], shared_set[4];
+    uint32_t pComb[11], pInvPerm[11], shared_set[6];
     for ( uint32_t i = 0; i < num_vars; ++i )
     {
       pComb[i] = pInvPerm[i] = i;
@@ -590,7 +590,7 @@ private:
     /* works up to 11 input truth tables */
     assert( num_vars <= 11 );
     best_free_set = free_set_size;
-    uint32_t shared_set[4];
+    uint32_t shared_set[6];
 
     uint32_t limit = std::min( 1 << ( ps.lut_size - free_set_size ), 1 << ( ps.max_shared_vars + 1 ) );
 
@@ -800,6 +800,8 @@ private:
   {
     /* init combinations */
     uint32_t pComb[6], pInvPerm[6];
+    if ( best_free_set >= ps.lut_size )
+      return -1;
     uint32_t max_shared_vars = std::min( ps.lut_size - best_free_set - 1, ps.max_shared_vars );
 
     /* search for a feasible shared set */
@@ -820,7 +822,9 @@ private:
             res_shared[j] = pComb[j];
           }
           /* sort vars */
-          std::sort( res_shared, res_shared + i );
+          for ( uint32_t j = 1; j < i; ++j )
+            for ( uint32_t k = j; k > 0 && res_shared[k] < res_shared[k - 1]; --k )
+              std::swap( res_shared[k], res_shared[k - 1] );
           return i;
         }
       } while ( combinations_next_simple( i, pComb, pInvPerm, num_vars - best_free_set ) );
@@ -846,7 +850,8 @@ private:
     uint32_t const inner_loop_max = ( num_vars < 6 ? ( 1 << num_vars ) : 64 ) >> best_free_set;
 
     uint64_t fs_fun[32] = { 0 };
-    uint64_t dc_mask = ( ( UINT64_C( 1 ) << next_group ) - 1 );
+    // A six-input bound set occupies the whole word.
+    uint64_t dc_mask = next_group == 64 ? UINT64_MAX : ( ( UINT64_C( 1 ) << next_group ) - 1 );
 
     uint32_t group_index = 0;
     uint32_t set_index = 0;
@@ -916,6 +921,8 @@ private:
       if ( bs_support_size < i )
       {
         kitty::swap_inplace( bs, bs_support_size, i );
+        // Keep the care set in the same variable order as the function.
+        kitty::swap_inplace( care, bs_support_size, i );
       }
 
       bs_support[bs_support_size] = i;

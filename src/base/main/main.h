@@ -58,6 +58,13 @@ ABC_NAMESPACE_HEADER_START
 ///                    STRUCTURE DEFINITIONS                         ///
 ////////////////////////////////////////////////////////////////////////
 
+typedef struct Abc_Nf2Cache_t_
+{
+    struct Nf2_Shared_t_ * pCurrent;
+    struct Nf2_Shared_t_ * pPrevious;
+    struct Nf2_TieLib_t_ * pTies;
+} Abc_Nf2Cache_t;
+
 ////////////////////////////////////////////////////////////////////////
 ///                       MACRO DEFINITIONS                          ///
 ////////////////////////////////////////////////////////////////////////
@@ -76,14 +83,21 @@ extern ABC_DLL void            Abc_Stop();
 /*=== mainFrame.c ===========================================================*/
 extern ABC_DLL Abc_Ntk_t *     Abc_FrameReadNtk( Abc_Frame_t * p );
 extern ABC_DLL Gia_Man_t *     Abc_FrameReadGia( Abc_Frame_t * p );
+extern ABC_DLL Vec_Ptr_t *     Abc_FrameReadGias( Abc_Frame_t * p );
+extern ABC_DLL int             Abc_FrameReadGiasLutSize( Abc_Frame_t * p );
+extern ABC_DLL word            Abc_FrameReadGiasLibSignature( Abc_Frame_t * p );
 extern ABC_DLL FILE *          Abc_FrameReadOut( Abc_Frame_t * p );
 extern ABC_DLL FILE *          Abc_FrameReadErr( Abc_Frame_t * p );
+extern ABC_DLL Abc_Frame_t *    Abc_FrameCreateChild( void );
+extern ABC_DLL Abc_Frame_t *    Abc_FrameCreateWithLog( void );
+extern ABC_DLL int             Abc_FrameCopyLog( Abc_Frame_t * p, FILE * pFile );
 extern ABC_DLL int             Abc_FrameReadMode( Abc_Frame_t * p );
 extern ABC_DLL int             Abc_FrameSetMode( Abc_Frame_t * p, int fNameMode );
 extern ABC_DLL void            Abc_FrameRestart( Abc_Frame_t * p );
 extern ABC_DLL int             Abc_FrameShowProgress( Abc_Frame_t * p );
 extern ABC_DLL void            Abc_FrameClearVerifStatus( Abc_Frame_t * p );
 extern ABC_DLL void            Abc_FrameUpdateGia( Abc_Frame_t * p, Gia_Man_t * pNew );
+extern ABC_DLL void            Abc_FrameSetGias( Abc_Frame_t * p, Vec_Ptr_t * vNew, int nLutSize, word LibSignature );
 extern ABC_DLL Gia_Man_t *     Abc_FrameGetGia( Abc_Frame_t * p );
 
 extern ABC_DLL void            Abc_FrameSetCurrentNetwork( Abc_Frame_t * p, Abc_Ntk_t * pNet );
@@ -92,9 +106,16 @@ extern ABC_DLL void            Abc_FrameReplaceCurrentNetwork( Abc_Frame_t * p, 
 extern ABC_DLL void            Abc_FrameUnmapAllNetworks( Abc_Frame_t * p );
 extern ABC_DLL void            Abc_FrameDeleteAllNetworks( Abc_Frame_t * p );
 
+extern ABC_DLL Abc_Frame_t *   Abc_FrameCreate();
+extern ABC_DLL void            Abc_FrameDestroy( Abc_Frame_t * p );
+extern ABC_DLL Abc_Frame_t *   Abc_FrameEnter( Abc_Frame_t * p );
+extern ABC_DLL void            Abc_FrameLeave( Abc_Frame_t * pPrevious );
+extern ABC_DLL Abc_Frame_t *   Abc_FrameCurrent();
+/* Deprecated: use Abc_FrameEnter()/Abc_FrameLeave(). */
 extern ABC_DLL void            Abc_FrameSetGlobalFrame( Abc_Frame_t * p );
 extern ABC_DLL Abc_Frame_t *   Abc_FrameGetGlobalFrame();
 extern ABC_DLL Abc_Frame_t *   Abc_FrameReadGlobalFrame();
+extern ABC_DLL Abc_Nf2Cache_t * Abc_FrameReadNf2Cache( void );
 
 extern ABC_DLL Vec_Ptr_t *     Abc_FrameReadStore();                  
 extern ABC_DLL int             Abc_FrameReadStoreSize();              
@@ -110,6 +131,13 @@ extern ABC_DLL void *          Abc_FrameReadManDd();
 extern ABC_DLL void *          Abc_FrameReadManDec();                    
 extern ABC_DLL void *          Abc_FrameReadManDsd();           
 extern ABC_DLL void *          Abc_FrameReadManDsd2();           
+extern ABC_DLL void *          Abc_FrameReadManDar();
+extern ABC_DLL void *          Abc_FrameReadManCnf();
+extern ABC_DLL void *          Abc_FrameReadManAigR();
+extern ABC_DLL void *          Abc_FrameReadManNpn();
+extern ABC_DLL void *          Abc_FrameReadManSdm();
+extern ABC_DLL void *          Abc_FrameReadManLms();
+extern ABC_DLL void *          Abc_FrameReadManBest();
 extern ABC_DLL Vec_Ptr_t *     Abc_FrameReadSignalNames();
 extern ABC_DLL char *          Abc_FrameReadSpecName();
          
@@ -152,6 +180,13 @@ extern ABC_DLL void            Abc_FrameSetNFrames( int nFrames );
 extern ABC_DLL void            Abc_FrameSetStatus( int Status );
 extern ABC_DLL void            Abc_FrameSetManDsd( void * pMan );
 extern ABC_DLL void            Abc_FrameSetManDsd2( void * pMan );
+extern ABC_DLL void            Abc_FrameSetManDar( void * pMan );
+extern ABC_DLL void            Abc_FrameSetManCnf( void * pMan );
+extern ABC_DLL void            Abc_FrameSetManAigR( void * pMan );
+extern ABC_DLL void            Abc_FrameSetManNpn( void * pMan );
+extern ABC_DLL void            Abc_FrameSetManSdm( void * pMan );
+extern ABC_DLL void            Abc_FrameSetManLms( void * pMan );
+extern ABC_DLL void            Abc_FrameSetManBest( void * pMan );
 extern ABC_DLL void            Abc_FrameSetInv( Vec_Int_t * vInv );
 extern ABC_DLL void            Abc_FrameSetCnf( Vec_Int_t * vInv );
 extern ABC_DLL void            Abc_FrameSetStr( Vec_Str_t * vInv );

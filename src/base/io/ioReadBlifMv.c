@@ -37,8 +37,6 @@ typedef struct Io_MvVar_t_ Io_MvVar_t; // parsing var
 typedef struct Io_MvMod_t_ Io_MvMod_t; // parsing model
 typedef struct Io_MvMan_t_ Io_MvMan_t; // parsing manager
 
-Vec_Ptr_t *vGlobalLtlArray;
-
 struct Io_MvVar_t_
 {
     int                  nValues;      // the number of values 
@@ -147,7 +145,6 @@ Abc_Ntk_t * Io_ReadBlifMv( char * pFileName, int fBlifMv, int fCheck )
     Abc_Des_t * pDesign = NULL; 
     char * pDesignName;
     int RetValue, i;
-    char * pLtlProp;
 
     // check that the file is available
     pFile = fopen( pFileName, "rb" );
@@ -179,7 +176,7 @@ Abc_Ntk_t * Io_ReadBlifMv( char * pFileName, int fBlifMv, int fCheck )
     // prepare the file for parsing
     Io_MvReadPreparse( p );
     // parse interfaces of each network and construct the network
-    if ( Io_MvReadInterfaces( p ) )
+    if ( !p->sError[0] && Io_MvReadInterfaces( p ) )
         pDesign = Io_MvParse( p );
     if ( p->sError[0] )
         fprintf( stdout, "%s\n", p->sError );
@@ -248,10 +245,6 @@ Abc_Ntk_t * Io_ReadBlifMv( char * pFileName, int fBlifMv, int fCheck )
     if ( pNtk->pSpec == NULL )
         pNtk->pSpec = Extra_UtilStrsav( pFileName );
 
-    vGlobalLtlArray = Vec_PtrAlloc( 100 );
-    Vec_PtrForEachEntry( char *, vGlobalLtlArray, pLtlProp, i )
-        Vec_PtrPush( pNtk->vLtlProperties, pLtlProp );
-    Vec_PtrFreeP( &vGlobalLtlArray );
     return pNtk;
 }
 
@@ -789,6 +782,11 @@ static void Io_MvReadPreparse( Io_MvMan_t * p )
         // parse directives
         if ( *(pCur-1) != '.' )
             continue;
+        if ( p->pLatest == NULL && strncmp(pCur, "model", 5) && strncmp(pCur, "end", 3) && strncmp(pCur, "exdc", 4) )
+        {
+            sprintf( p->sError, "Line %d: Directive outside a model.", Io_MvGetLine(p, pCur) );
+            return;
+        }
         if ( !strncmp(pCur, "names", 5) || !strncmp(pCur, "table", 5) || !strncmp(pCur, "gate", 4) )
             Vec_PtrPush( p->pLatest->vNames, pCur );
         else if ( p->fBlifMv && (!strncmp(pCur, "def ", 4) || !strncmp(pCur, "default ", 8)) )
@@ -1217,7 +1215,7 @@ static int Io_MvParseLineLtlProperty( Io_MvMod_t * p, char * pLine )
         //printf("%c", pLine[i] );
         actualLtlFormula[j] = pLine[i];
     actualLtlFormula[j] = '\0';
-    Vec_PtrPush( vGlobalLtlArray, actualLtlFormula );
+    Vec_PtrPush( p->pNtk->vLtlProperties, actualLtlFormula );
     return 1;
 }
 
@@ -1259,13 +1257,16 @@ static int Io_MvParseLineLatch( Io_MvMod_t * p, char * pLine )
             if ( Vec_PtrSize(vTokens) > 6 )
                 printf( "Warning: Line %d has .latch directive with unrecognized entries (the total of %d entries).\n", 
                     Io_MvGetLine(p->pMan, pToken), Vec_PtrSize(vTokens) ); 
-            if ( Vec_PtrSize(vTokens) > 3 )
-                Init = atoi( (char *)Vec_PtrEntryLast(vTokens) );
+            if ( Vec_PtrSize(vTokens) == 4 || Vec_PtrSize(vTokens) == 6 )
+            {
+                pToken = (char *)Vec_PtrEntryLast(vTokens);
+                Init = pToken[0] && !pToken[1] ? pToken[0] - '0' : -1;
+            }
             else
                 Init = 2;
             if ( Init < 0 || Init > 3 )
             {
-                sprintf( p->pMan->sError, "Line %d: Initial state of the latch is incorrect \"%s\".", Io_MvGetLine(p->pMan, pToken), (char*)Vec_PtrEntry(vTokens,3) );
+                sprintf( p->pMan->sError, "Line %d: Initial state of the latch is incorrect \"%s\".", Io_MvGetLine(p->pMan, pToken), pToken );
                 return 0;
             }
             if ( Init == 0 )
@@ -2133,6 +2134,7 @@ static int Io_MvParseLineNamesBlif( Io_MvMod_t * p, char * pLine )
 
 ABC_NAMESPACE_IMPL_END
 
+
 #include "map/mio/mio.h"
 #include "base/main/main.h"
 
@@ -2306,12 +2308,13 @@ static int Io_MvParseLineGateBlif( Io_MvMod_t * p, Vec_Ptr_t * vTokens )
         p->pNtk->ntkFunc = ABC_FUNC_MAP;
         Mem_FlexStop( (Mem_Flex_t *)p->pNtk->pManFunc, 0 );
         p->pNtk->pManFunc = pGenlib;
-        if ( p->pMan && p->pMan->pDesign && Vec_PtrSize(p->pMan->pDesign->vModules) > 0 )
+        if ( strcmp(p->pNtk->pName, "EXDC") && p->pMan && p->pMan->pDesign && Vec_PtrSize(p->pMan->pDesign->vModules) > 0 )
         {
             Abc_Ntk_t * pModel; int k;
             Vec_PtrForEachEntry( Abc_Ntk_t *, p->pMan->pDesign->vModules, pModel, k )
             {
-                if ( pModel == p->pNtk )
+                // The EXDC cover keeps its own SOP memory manager.
+                if ( pModel == p->pNtk || !strcmp(pModel->pName, "EXDC") )
                     continue;
                 assert( pModel->ntkFunc == ABC_FUNC_SOP );
                 pModel->ntkFunc = ABC_FUNC_MAP;
@@ -2405,4 +2408,3 @@ static inline int Abc_MapBox2Prev( Vec_Ptr_t * vDrivers, Vec_Int_t * vMapIn, Vec
 
 
 ABC_NAMESPACE_IMPL_END
-

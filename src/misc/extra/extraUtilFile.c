@@ -155,9 +155,16 @@ char * Extra_FileNameExtension( char * FileName )
 ***********************************************************************/
 char * Extra_FileNameAppend( char * pBase, char * pSuffix )
 {
-    static char Buffer[500];
-    assert( strlen(pBase) + strlen(pSuffix) < 500 );
-    sprintf( Buffer, "%s%s", pBase, pSuffix );
+    static ABC_THREAD_LOCAL char Buffer[500];
+    size_t nBase = strlen(pBase), nSuffix = strlen(pSuffix);
+    assert( nBase + nSuffix < sizeof(Buffer) );
+    if ( nBase >= sizeof(Buffer) || nSuffix >= sizeof(Buffer) - nBase )
+    {
+        fprintf( stderr, "Extra_FileNameAppend: filename exceeds buffer capacity.\n" );
+        abort();
+    }
+    memmove( Buffer, pBase, nBase );
+    memmove( Buffer + nBase, pSuffix, nSuffix + 1 );
     return Buffer;
 }
 
@@ -194,7 +201,7 @@ char * Extra_FileNameGeneric( char * FileName )
 ***********************************************************************/
 char * Extra_FileNameGenericAppend( char * pBase, char * pSuffix )
 {
-    static char Buffer[PATH_MAX];
+    static ABC_THREAD_LOCAL char Buffer[PATH_MAX];
     char * pDot;
     assert( strlen(pBase) + strlen(pSuffix) < PATH_MAX );
     strcpy( Buffer, pBase );
@@ -259,7 +266,7 @@ char * Extra_FilePathWithoutName( char * FileName )
 }
 char * Extra_FileInTheSameDir( char * pPathFile, char * pFileName )
 {
-    static char pBuffer[1000]; char * pThis;
+    static ABC_THREAD_LOCAL char pBuffer[1000]; char * pThis;
     assert( strlen(pPathFile) + strlen(pFileName) < 990 );
     memmove( pBuffer, pPathFile, strlen(pPathFile) );
     for ( pThis = pBuffer + strlen(pPathFile) - 1; pThis >= pBuffer; pThis-- )
@@ -467,14 +474,16 @@ int Extra_FileIsType( char * pFileName, char * pS1, char * pS2, char * pS3 )
 ***********************************************************************/
 char * Extra_TimeStamp()
 {
-    static char Buffer[100];
-    char * TimeStamp;
+    static ABC_THREAD_LOCAL char Buffer[100];
     time_t ltime;
     // get the current time
     time( &ltime );
-    TimeStamp = asctime( localtime( &ltime ) );
-    TimeStamp[ strlen(TimeStamp) - 1 ] = 0;
-    strcpy( Buffer, TimeStamp );
+#if defined(_WIN32)
+    ctime_s( Buffer, sizeof(Buffer), &ltime );
+#else
+    ctime_r( &ltime, Buffer );
+#endif
+    Buffer[ strlen(Buffer) - 1 ] = 0;
     return Buffer;
 }
 
@@ -924,4 +933,3 @@ int main( int argc, char ** argv )
 
 
 ABC_NAMESPACE_IMPL_END
-

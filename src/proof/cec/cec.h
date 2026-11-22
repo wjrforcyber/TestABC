@@ -39,6 +39,59 @@ ABC_NAMESPACE_HEADER_START
 ///                         BASIC TYPES                              ///
 ////////////////////////////////////////////////////////////////////////
 
+// shallow k-induction parameters
+typedef struct Cec_ParKind_t_ Cec_ParKind_t;
+struct Cec_ParKind_t_
+{
+    int              nFramesMax;    // maximum induction depth
+    int              nConfLimit;    // conflicts per SAT query (0 = unlimited)
+    int              nTimeOutMs;    // total runtime in milliseconds (0 = unlimited)
+    abctime          TimeToStop;    // optional earlier absolute wall deadline
+    int              nAndMax;       // maximum input AND count (0 = unlimited)
+    int              fVerbose;      // print individual proof obligations
+    int              iFrame;        // proved induction depth, or -1
+    int              nQueries;      // SAT calls, excluding constant obligations
+    int              RunId;         // identifier passed to the stop callback
+    int            (*pFuncStop)(int); // optional cooperative cancellation
+    int              fUseCadical;   // use CaDiCaL for base and induction queries
+};
+
+// Optional limits for callers embedding CEC with an absolute deadline.
+typedef struct Cec_ParLimit_t_ Cec_ParLimit_t;
+struct Cec_ParLimit_t_
+{
+    abctime          TimeToStop;
+    int              RunId;
+    int            (*pFuncStop)(int);
+    int *            pCancelled;   // optional shared cancellation latch (initialize to NULL)
+};
+
+static inline int Cec_ManIsStopped( Cec_ParLimit_t * p )
+{
+    if ( !p ) return 0;
+    if ( p->pCancelled && *p->pCancelled ) return 1;
+    if ( p->pFuncStop && p->pFuncStop(p->RunId) )
+    {
+        if ( p->pCancelled ) *p->pCancelled = 1;
+        return 1;
+    }
+    return p->TimeToStop && Abc_Clock() >= p->TimeToStop;
+}
+
+// Optional cumulative effort for an embedded sequence of SAT queries.
+typedef struct Cec_ParEffort_t_ Cec_ParEffort_t;
+struct Cec_ParEffort_t_
+{
+    int              nCallsMax, nCalls;
+    ABC_INT64_T      nConflictsMax, nConflicts;
+};
+
+static inline int Cec_ManEffortStopped( Cec_ParEffort_t * p )
+{
+    return p && ((p->nCallsMax && p->nCalls >= p->nCallsMax) ||
+                 (p->nConflictsMax && p->nConflicts >= p->nConflictsMax));
+}
+
 // dynamic SAT parameters
 typedef struct Cec_ParSat_t_ Cec_ParSat_t;
 struct Cec_ParSat_t_
@@ -54,6 +107,8 @@ struct Cec_ParSat_t_
     int              fLearnCls;     // perform clause learning
     int              fSaveCexes;    // saves counter-examples
     int              fVerbose;      // verbose stats
+    Cec_ParLimit_t *  pLimits;       // optional instance-owned limits
+    Cec_ParEffort_t * pEffort;       // optional cumulative query/conflict budget
 };
 
 // simulation parameters
@@ -123,6 +178,9 @@ struct Cec_ParFra_t_
     int              fBMiterInfo;   // printing BMiter information
     int              nPO;           // number of po in original design given a bmiter
     char *           pDumpName;     // file name to dump statistics
+    Cec_ParLimit_t *  pLimits;       // optional instance-owned limits
+    int              fUseProvedIds; // record refined proved pairs; requires fUseOrigIds
+    Cec_ParEffort_t * pEffort;       // optional cumulative query/conflict budget
 };
 
 // combinational equivalence checking parameters
@@ -145,7 +203,49 @@ struct Cec_ParCec_t_
     Vec_Ptr_t *      vNamesIn;      // input names of the first network
 };
 
+// Optional aggregate profiling for one or more correspondence calls.  All
+// time fields use Abc_ClockHr() ticks (nanoseconds), rather than clock().
+// The SAT/UNSAT/UNKNOWN counters below describe the internal SRM obligations
+// seen by &scorr; they are intentionally distinct from a caller's final
+// transaction outcome.
+typedef struct Cec_ProfCor_t_ Cec_ProfCor_t;
+struct Cec_ProfCor_t_
+{
+    abctime          timeClasses;   // class discovery + base + induction
+    abctime          timeInit;      // simulation/class initialization
+    abctime          timeBmc;       // complete reset/base phase
+    abctime          timeBmcSrm;    // base-phase SRM construction
+    abctime          timeBmcSat;    // base-phase solver wall time
+    abctime          timeBmcSetup;  // solver/CNF setup within base phase
+    abctime          timeBmcSolve;  // per-obligation solving within base phase
+    abctime          timeBmcSim;    // base CEX resimulation/refinement
+    abctime          timeInd;       // complete inductive refinement loop
+    abctime          timeIndSrm;    // inductive SRM construction
+    abctime          timeIndSat;    // inductive solver wall time
+    abctime          timeIndSetup;  // solver/CNF setup within induction
+    abctime          timeIndSolve;  // per-obligation solving within induction
+    abctime          timeIndSim;    // inductive CEX resimulation/refinement
+    abctime          timeReduce;    // final Gia_ManCorrReduce/cleanup
+    long long        nBmcUnsat;     // internally discharged base obligations
+    long long        nBmcSat;       // base obligations with counterexamples
+    long long        nBmcUnknown;   // base obligations hitting proof limits
+    long long        nIndUnsat;     // internally discharged step obligations
+    long long        nIndSat;       // step obligations with counterexamples
+    long long        nIndUnknown;   // step obligations hitting proof limits
+    long long        nCexReal;      // SAT records carrying assignments
+    long long        nCexTrivial;   // structurally constant-one obligations
+    long long        nCexFail;      // timeout/failure records
+    long long        nConfUsed;     // exact conflicts/backtracks consumed
+    int              nConfStops;    // calls stopped by the total conflict cap
+    int              nCalls;        // Cec_ManLSCorrespondenceClasses calls
+    int              nBmcRounds;    // base SRMs built
+    int              nIndRounds;    // inductive SRMs built
+};
+
 // sequential register correspodence parameters
+typedef void (*Cec_CexBatchFunc_t)( void * pData, Gia_Man_t * pAig,
+    Vec_Ptr_t * vSimInfo, Vec_Int_t * vOutBits, int nFrames,
+    int fInduction );
 typedef struct Cec_ParCor_t_ Cec_ParCor_t;
 struct Cec_ParCor_t_
 {
@@ -154,6 +254,15 @@ struct Cec_ParCor_t_
     int              nFrames;       // the number of time frames
     int              nPrefix;       // the number of time frames in the prefix
     int              nBTLimit;      // conflict limit at a node
+    int              nConfTotal;    // total conflicts across this correspondence call (0 = unlimited)
+    long long        nConfUsed;     // output: exact conflicts/backtracks consumed
+    int              fConfStop;     // output: total conflict cap was reached
+    word             nWorkLimit;    // optional structural node/word/frame budget (0 = unlimited)
+    word             nWorkUsed;     // output: work reserved before construction/simulation passes
+    int              fWorkStop;     // output: the next structural pass exceeded the budget
+    int              fIncomplete;   // output: correspondence stopped before convergence
+    int              fCompleted;    // output: standard base+induction refinement converged
+    int              nRoundsDone;   // output: completed induction refinement rounds
     int              nProcs;        // the number of processes
     int              nPartSize;     // the partition size
     int              nLevelMax;     // (scorr only) the max number of levels
@@ -171,7 +280,7 @@ struct Cec_ParCor_t_
     int              fUseSmartCnf;  // use smart CNF computation
     int              fStopWhenGone; // quit when PO is not a candidate constant
     int              fIncremental;  // active-list/TFO-triggered reproof in main loop
-    int              fIncrOracle;   // internal unbounded shadow SAT for pairs skipped by -i
+    int              fIncrOracle;   // unbounded shadow SAT for pairs skipped by -i
     int              fIncrSim;      // persistent CEX-TFO-only resimulation after SAT
     int              fDynSrm;       // persistent dynamic SRM and true-unroll resimulation
     int              fDynSrmNoAdapt;// disable adaptive cold-rebuilds in DynSRM
@@ -179,10 +288,13 @@ struct Cec_ParCor_t_
     int              fBmcTasAdaptive;// use guarded CBS-first/TAS-rescue policy in BMC
     int              fKissatCert;   // strictly audit final base+step obligations with Kissat
     int              fSkipFailResim;// skip resim in rounds with no real CEX (only timeout/fail)
-    int              fVerifyResim;  // internal oracle: check incremental resim values vs full sweep
+    int              fVerifyResim;  // (-V) oracle: check incremental resim values vs full sweep
     int              fVerboseFlops; // verbose stats
     int              fVeryVerbose;  // verbose stats
     int              fVerbose;      // verbose stats
+    Cec_ProfCor_t *  pProfile;      // optional aggregate phase profiling
+    Cec_CexBatchFunc_t pCexFunc;    // optional packed BMC/induction CEX observer
+    void *           pCexData;      // user data for the CEX observer
     // callback
     void *           pData;
     void *           pFunc;
@@ -249,14 +361,85 @@ struct Cec_ParSimGen_t_
 
 /*=== cecCec.c ==========================================================*/
 extern int           Cec_ManVerify( Gia_Man_t * p, Cec_ParCec_t * pPars );
+extern int           Cec_ManVerifyWithLimits( Gia_Man_t * p, Cec_ParCec_t * pPars,
+                                             Cec_ParLimit_t * pLimits, Gia_Man_t ** ppReduced );
 extern int           Cec_ManVerifyTwo( Gia_Man_t * p0, Gia_Man_t * p1, int fVerbose );
 extern int           Cec_ManVerifyTwoInv( Gia_Man_t * p0, Gia_Man_t * p1, int fVerbose );
 extern int           Cec_ManVerifySimple( Gia_Man_t * p );
 /*=== cecChoice.c ==========================================================*/
 extern Gia_Man_t *   Cec_ManChoiceComputation( Gia_Man_t * pAig, Cec_ParChc_t * pPars );
+/*=== cecClass.c ===========================================================*/
+extern void          Cec_ManSimClassCreate( Gia_Man_t * p, Vec_Int_t * vClass );
 /*=== cecCorr.c ==========================================================*/
 extern int           Cec_ManLSCorrespondenceClasses( Gia_Man_t * pAig, Cec_ParCor_t * pPars );
 extern Gia_Man_t *   Cec_ManLSCorrespondence( Gia_Man_t * pAig, Cec_ParCor_t * pPars );
+/*=== cecCorr2.c ===========================================================*/
+extern Gia_Man_t *   Cec_ManLSCorrespondence2( Gia_Man_t * pAig, Cec_ParCor_t * pPars );
+/*=== cecCorr3.c ===========================================================*/
+extern Gia_Man_t *   Cec_ManLSCorrespondence3( Gia_Man_t * pAig, Cec_ParCor_t * pPars );
+/*=== cecCorr4.c ===========================================================*/
+extern Gia_Man_t *   Cec_ManLSCorrespondence4( Gia_Man_t * pAig, Cec_ParCor_t * pPars, int nSides, int fRewrite );
+
+// Sequential Direct root-resubstitution parameters.
+typedef struct Cec_ParTran_t_ Cec_ParTran_t;
+struct Cec_ParTran_t_
+{
+    int              nFrames;       // BMC/induction depth in the scorr oracle
+    int              nBTLimit;      // conflict limit per proof obligation
+    int              nStepsMax;     // scorr induction refinement limit
+    int              nConstrMax;    // TFI depth used to collect local divisors (0 = complete TFI)
+    int              nConstrBaseMax;// physical nodes in the local divisor pool (0 = all)
+    int              nKitCoreMax;   // exact-observation separator size for an additional Kit candidate
+    int              fBdcPortfolio; // add a BDC candidate on the same bounded observation core
+    int              nDepNodesMax;  // maximum AIG nodes in a dependency recipe (1..100)
+    int              nSimWords;     // 64-bit words per reachable simulation frame
+    int              nSimFrames;    // random reset-reachable frames per signature batch
+    int              nRootWaves;    // maximum SEQ proof epochs (0 = fixed point)
+    int              nRootConstrTop;// SEQ Build q: per wave normally, per snapshot with proof micro-batching
+    int              nRootProofBatch;// SEQ Build candidates per root/proof micro-batch (0 = legacy immediate commit)
+    int              nStage5Paths;  // experimental Stage-5 paths per eligible top pivot (0/1 = baseline)
+    int              nOdcProofMax;  // serial proof attempts or fanout candidates per snapshot (0 = all)
+    int              nOdcFanoutRounds; // optional fanout discovery/commit round cap (0 = fixed point)
+    int              nSignatureGuide; // ODC observation guide: 0=off, 1=random, 2=missing-value SAT, 3=also aliases
+    int              nStrictSteps, nStrictWaves; // -2 / -1 inherits S / w
+    int              nInitialFrames, nInitialConflicts; // -1 inherits F/C
+    int              nWindowFrames, nWindowConflicts; // -1 inherits F/C
+    int              nWindowDivs, nWindowCandidates; // -1 inherits B/q
+    int              nWindowSteps; // -2 inherits S; -1 unlimited
+    int              fWindowCache, fWindowFactor; // opt-in exact stream / masked proof
+    int              nWindowCacheMiB; // logical cache payload limit, 0 = unlimited
+    int              nExplore;      // opt-in exploration: 1=CI cache, 2=observations, 4=pool conflict stop, 8=CI shadow, 16=guided TFO rescue, 512=ODC Direct/MFFC1
+    int              nCombBTLimit;  // root CBS conflict limit per cube
+    int              nFreeWords;    // 64-bit independent PI/RO words for combination screening
+    int              nFreeCexMax;   // CBS free-state counterexamples retained per proof batch
+    int              nHardConfTotal;// whole-miter shadow-audit conflict cap
+    int              fUseExisting;  // enable exact earlier-literal candidates
+    int              fUseMffcDivs;  // allow exact-MFFC internal nodes in the root divisor pool
+    int              fUseTfoDivs;   // add one-hop complete-fanin TFO divisors in the SEQ phase
+    int              fUseCombTfoDivs;// allow the legal shell in the explicit combinational adapter
+    int              fCombFreeDiscovery;// independent PI/RO signatures for the explicit combinational adapter
+    int              fUseOdc;       // run serial first-level ODC Build after the strict fixed point
+    int              fOdcStrict;    // use full care in the serial phase (matched experiment control)
+    int              fOdcFanout;    // opt-in frozen fanout-boundary proof and conservative bundle commit
+    int              fOdcProofScope; // internal: actual ODC invocation, never a Strict prefix option
+    int              fRoute1;      // reviewed ordinary-COM/Strict/ODC policy defaults
+    int              fStran2Guide; // historical Guide1/CEX4 search, external scorr prefix
+    int              fRoute3;      // standalone relational-Strict followed by reviewed ODC
+    int              fSeqOnly;     // explicit external-prefix entry: omit initial scorr and COM
+    int              fResetNested; // sample reset traces in frozen eight-frame blocks
+    int              fUseConstr;    // enable dependency-function resub recipes
+    int              fUseCbsMultiLit;// root CBS: direct literal cubes vs constructed XOR query
+    int              fUseFreeSim;   // screen/CEGIS CBS candidates with independent PI/RO signatures
+    int              fUseHelpers;   // seed every valid retained proof as an induction helper
+    int              fBuildOnly;    // suppress constant/existing candidates
+    int              fShadow;       // whole-miter shadow audit for local proofs
+    int              fUseSolvSched; // reorder Stage-5 pivots by residual solvability
+    int              fProfile;      // print exact Build reduction
+    int              fVerbose;      // print detailed discovery/proof diagnostics
+};
+extern void          Cec_ManTranSetDefaultParams( Cec_ParTran_t * pPars );
+extern void          Cec_ManTranSetRoute3Params( Cec_ParTran_t * pPars, int fOdc );
+extern Gia_Man_t *   Cec_ManSequentialTransduction( Gia_Man_t * pAig, Cec_ParTran_t * pPars );
 /*=== cecCore.c ==========================================================*/
 extern void          Cec_ManSatSetDefaultParams( Cec_ParSat_t * p );
 extern void          Cec_ManSimSetDefaultParams( Cec_ParSim_t * p );
@@ -268,6 +451,11 @@ extern void          Cec_ManChcSetDefaultParams( Cec_ParChc_t * p );
 extern Gia_Man_t *   Cec_ManSatSweeping( Gia_Man_t * pAig, Cec_ParFra_t * pPars, int fSilent );
 extern Gia_Man_t *   Cec_ManSatSolving( Gia_Man_t * pAig, Cec_ParSat_t * pPars, int f0Proved );
 extern void          Cec_ManSimulation( Gia_Man_t * pAig, Cec_ParSim_t * pPars );
+/*=== cecKind.c ==========================================================*/
+// Proof-only precheck on a plain, zero-initialized GIA. Unsupported inputs
+// (including nonzero/unknown vRegInits) return -1 without modifying the GIA.
+extern void          Cec_ManKindSetDefaultParams( Cec_ParKind_t * pPars );
+extern int           Cec_GiaKind( Gia_Man_t * p, Cec_ParKind_t * pPars );
 /*=== cecSeq.c ==========================================================*/
 extern int           Cec_ManSeqResimulateCounter( Gia_Man_t * pAig, Cec_ParSim_t * pPars, Abc_Cex_t * pCex );
 extern int           Cec_ManSeqSemiformal( Gia_Man_t * pAig, Cec_ParSmf_t * pPars );

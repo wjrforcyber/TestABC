@@ -177,7 +177,9 @@ void kissat_reserve (kissat *solver, int max_var) {
     for (int idx = 1; idx <= max_var; idx++)
       (void) kissat_import_literal (solver, idx);
     for (unsigned idx = 0; idx != (unsigned) max_var; idx++)
-      kissat_activate_literal (solver, LIT (idx));
+      // Reserving after unit clauses must not reactivate fixed variables.
+      if (!solver->flags[idx].fixed && !solver->flags[idx].eliminated)
+        kissat_activate_literal (solver, LIT (idx));
   }
 }
 
@@ -205,6 +207,11 @@ int kissat_set_option (kissat *solver, const char *name, int new_value) {
   (void) solver, (void) new_value;
   return kissat_options_get (name);
 #endif
+}
+
+void kissat_disable_fast_elimination (kissat *solver) {
+  kissat_require_initialized (solver);
+  solver->disable_fast_elimination = true;
 }
 
 void kissat_set_decision_limit (kissat *solver, unsigned limit) {

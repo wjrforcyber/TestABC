@@ -94,11 +94,11 @@ ABC_NAMESPACE_IMPL_START
 static char rcsid[] DD_UNUSED = "$Id: cuddSymmetry.c,v 1.26 2009/02/19 16:23:54 fabio Exp $";
 #endif
 
-static  int     *entry;
+static ABC_THREAD_LOCAL int *entry;
 
-extern  int     ddTotalNumberSwapping;
+extern ABC_THREAD_LOCAL int ddTotalNumberSwapping;
 #ifdef DD_STATS
-extern  int     ddTotalNISwaps;
+extern ABC_THREAD_LOCAL int ddTotalNISwaps;
 #endif
 
 /*---------------------------------------------------------------------------*/
@@ -367,7 +367,7 @@ cuddSymmSifting(
         if (ddTotalNumberSwapping >= table->siftMaxSwap)
             break;
         // enable timeout during variable reodering - alanmi 2/13/11
-        if ( table->TimeStop && Abc_Clock() > table->TimeStop )
+        if ( (table->TimeStop && Abc_Clock() > table->TimeStop) || Cudd_CheckStop(table) )
             break;
         x = table->perm[var[i]];
 #ifdef DD_STATS

@@ -423,9 +423,11 @@ Gia_Man_t * Gia_ManInsertMfs( Gia_Man_t * p, Sfm_Ntk_t * pNtk, int fAllBoxes )
         pTruth = Sfm_NodeReadTruth( pNtk, iMfsId );
         iGroup = Vec_IntEntry( vGroupMap, iMfsId );
         vArray = Sfm_NodeReadFanins( pNtk, iMfsId ); // belongs to pNtk
-        if ( Vec_IntSize(vArray) == 1 && Vec_IntEntry(vArray,0) < nBbOuts ) // skip unreal inputs
+        // skip unreal inputs: the buffer from a black-box output to the CI
+        // representing it; after resubstitution, an internal node may also
+        // be driven by a black-box output alone and is handled below
+        if ( iGroup >= 0 && Abc_LitIsCompl(iGroup) && Vec_IntSize(vArray) == 1 && Vec_IntEntry(vArray,0) < nBbOuts )
         {
-            assert( Abc_LitIsCompl(iGroup) );
             assert( vBbOutLit != NULL );
             iLitNew = Vec_IntEntry( vBbOutLit, Vec_IntEntry(vArray,0) );
             assert( iLitNew >= 0 );
@@ -558,14 +560,14 @@ Gia_Man_t * Gia_ManInsertMfs( Gia_Man_t * p, Sfm_Ntk_t * pNtk, int fAllBoxes )
   SeeAlso     []
 
 ***********************************************************************/
-Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars )
+Gia_Man_t * Gia_ManPerformMfsTimed( Gia_Man_t * p, Sfm_Par_t * pPars, abctime Deadline )
 {
     Sfm_Ntk_t * pNtk;
     Gia_Man_t * pNew;
     int nFaninMax, nNodes = 0;
     assert( Gia_ManRegNum(p) == 0 );
     assert( p->vMapping != NULL );
-    if ( p->pManTime != NULL && p->pAigExtra == NULL )
+    if ( Gia_ManBoxNum(p) && p->pAigExtra == NULL )
     {
         Abc_Print( 1, "Timing manager is given but there is no GIA of boxes.\n" );
         return NULL;
@@ -584,8 +586,36 @@ Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars )
     }
     // collect information
     pNtk = Gia_ManExtractMfs( p );
+    if ( pPars->fBoxOrder && Gia_ManBoxNum(p) )
+    {
+        Tim_Man_t * pTim = (Tim_Man_t *)p->pManTime;
+        int i, k, Id;
+        for ( i = 0; i < Tim_ManBoxNum(pTim); i++ )
+        {
+            for ( k = 0; k < Tim_ManBoxInputNum(pTim, i); k++ )
+            {
+                Id = Gia_ObjId( p, Gia_ManCo(p, Tim_ManBoxInputFirst(pTim, i) + k) );
+                Sfm_NtkSetBoxPin( pNtk, Gia_ObjCopyArray(p, Id), i + 1 );
+            }
+            for ( k = 0; k < Tim_ManBoxOutputNum(pTim, i); k++ )
+            {
+                int iMfs;
+                Id = Gia_ObjId( p, Gia_ManCi(p, Tim_ManBoxOutputFirst(pTim, i) + k) );
+                iMfs = Gia_ObjCopyArray( p, Id );
+                Sfm_NtkSetBoxPin( pNtk, iMfs, -i - 1 );
+                if ( Tim_ManBoxIsBlack(pTim, i) )
+                {
+                    // Black-box outputs also have independent SAT inputs.
+                    // Selecting those directly must obey the same order.
+                    Vec_Int_t * vFanins = Sfm_NodeReadFanins( pNtk, iMfs );
+                    assert( Vec_IntSize(vFanins) == 1 );
+                    Sfm_NtkSetBoxPin( pNtk, Vec_IntEntry(vFanins, 0), -i - 1 );
+                }
+            }
+        }
+    }
     // perform optimization
-    nNodes = Sfm_NtkPerform( pNtk, pPars );
+    nNodes = Sfm_NtkPerformTimed( pNtk, pPars, Deadline );
     if ( nNodes == 0 )
     {
         if ( p->pManTime )
@@ -604,6 +634,16 @@ Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars )
     }
     Sfm_NtkFree( pNtk );
     return pNew;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Optimizes a LUT cover using the supplied MFS parameters.]
+
+***********************************************************************/
+Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars )
+{
+    return Gia_ManPerformMfsTimed(p, pPars, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////

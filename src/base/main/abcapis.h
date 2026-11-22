@@ -21,6 +21,8 @@
 #ifndef MINI_AIG__abc_apis_h
 #define MINI_AIG__abc_apis_h
 
+#include <stdio.h>
+
 ////////////////////////////////////////////////////////////////////////
 ///                          INCLUDES                                ///
 ////////////////////////////////////////////////////////////////////////
@@ -64,6 +66,21 @@ typedef struct Abc_Frame_t_      Abc_Frame_t;
 // procedures to start and stop the ABC framework
 extern ABC_DLL void   Abc_Start();
 extern ABC_DLL void   Abc_Stop();
+
+// An explicitly created frame is owned by the caller and is not current on
+// return. Enter/Leave pairs must be nested in strict LIFO order on one thread.
+// Leave all scopes before Destroy. The lazy default frame is stopped with
+// Abc_Stop(); explicitly created frames are stopped with Abc_FrameDestroy().
+extern ABC_DLL Abc_Frame_t * Abc_FrameCreate();
+// Capture requires ABC_USE_STDIO_REDIRECT and thread-local storage.
+// Logs live until frame destruction.
+// CopyLog is called with no commands/workers active and leaves the log writable.
+extern ABC_DLL Abc_Frame_t * Abc_FrameCreateWithLog( void );
+extern ABC_DLL int           Abc_FrameCopyLog( Abc_Frame_t * pAbc, FILE * pFile );
+extern ABC_DLL void          Abc_FrameDestroy( Abc_Frame_t * pAbc );
+extern ABC_DLL Abc_Frame_t * Abc_FrameEnter( Abc_Frame_t * pAbc );
+extern ABC_DLL void          Abc_FrameLeave( Abc_Frame_t * pPrevious );
+extern ABC_DLL Abc_Frame_t * Abc_FrameCurrent();
 
 // procedures to get the ABC framework (pAbc) and execute commands in it
 extern ABC_DLL Abc_Frame_t * Abc_FrameGetGlobalFrame();
@@ -122,4 +139,3 @@ ABC_NAMESPACE_HEADER_END
 ////////////////////////////////////////////////////////////////////////
 ///                       END OF FILE                                ///
 ////////////////////////////////////////////////////////////////////////
-

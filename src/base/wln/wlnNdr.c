@@ -233,9 +233,12 @@ Wln_Ntk_t * Wln_NtkFromNdr( void * pData, int fDump )
     {
         int End, Beg, Signed = Ndr_ObjGetRange(p, Obj, &End, &Beg);
         int nArray  = Ndr_ObjReadArray( p, Obj, NDR_INPUT, &pArray );
+        (void)nArray;
         int iObj    = Wln_ObjAlloc( pNtk, ABC_OPER_CO, Signed, End, Beg );
         int NameId  = Ndr_ObjReadBody( p, Obj, NDR_OUTPUT );
+        (void)NameId;
         int InstId  = Ndr_ObjReadBody( p, Obj, NDR_NAME );
+        (void)InstId;
         assert( nArray == 1 && NameId == -1 && InstId == -1 );
         Wln_ObjAddFanin( pNtk, iObj, pArray[0] );
     }
@@ -268,8 +271,11 @@ Wln_Ntk_t * Wln_NtkFromNdr( void * pData, int fDump )
     assert( i == Vec_PtrSize(vConstStrings) );
     Vec_PtrFree( vConstStrings );
     //Ndr_NtkPrintObjects( pNtk );
-    Wln_WriteVer( pNtk, "temp_ndr.v" );
-    printf( "Dumped design \"%s\" into file \"temp_ndr.v\".\n", pNtk->pName );
+    if ( fDump )
+    {
+        Wln_WriteVer( pNtk, "temp_ndr.v" );
+        printf( "Dumped design \"%s\" into file \"temp_ndr.v\".\n", pNtk->pName );
+    }
     if ( !Wln_NtkIsAcyclic(pNtk) )
     {
         Wln_NtkFree(pNtk);
@@ -299,7 +305,6 @@ Wln_Ntk_t * Wln_ReadNdr( char * pFileName )
 {
     void * pData = Ndr_Read( pFileName );
     Wln_Ntk_t * pNtk = pData ? Wln_NtkFromNdr( pData, 0 ) : NULL;
-    if ( pNtk ) return NULL;
     //char * ppNames[10] = { NULL, "a", "b", "c", "d", "e", "f", "g", "h", "i" };
     //Ndr_WriteVerilog( NULL, pData, ppNames, 0 );
     Ndr_Delete( pData );
@@ -314,7 +319,7 @@ void Wln_ReadNdrTest()
     Wln_NtkStaticFanoutTest( pNtk );
     Wln_NtkFree( pNtk );
 }
-void Wln_NtkRetimeTest( char * pFileName, int fIgnoreIO, int fSkipSimple, int fDump, int fVerbose )
+int Wln_NtkRetimeTest( char * pFileName, int fIgnoreIO, int fSkipSimple, int fDump, int fVerbose )
 {
     Vec_Int_t * vMoves;
     void * pData = Ndr_Read( pFileName );
@@ -323,13 +328,14 @@ void Wln_NtkRetimeTest( char * pFileName, int fIgnoreIO, int fSkipSimple, int fD
     if ( pNtk == NULL ) 
     {
         printf( "Retiming network is not available.\n" );
-        return;
+        return 0;
     }
     Wln_NtkRetimeCreateDelayInfo( pNtk );
     vMoves = Wln_NtkRetime( pNtk, fIgnoreIO, fSkipSimple, fVerbose );
     //Vec_IntPrint( vMoves );
     Vec_IntFree( vMoves );
     Wln_NtkFree( pNtk );
+    return 1;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -338,4 +344,3 @@ void Wln_NtkRetimeTest( char * pFileName, int fIgnoreIO, int fSkipSimple, int fD
 
 
 ABC_NAMESPACE_IMPL_END
-

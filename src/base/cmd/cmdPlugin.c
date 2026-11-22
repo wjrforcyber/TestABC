@@ -27,6 +27,7 @@
 
 #include "base/abc/abc.h"
 #include "base/main/mainInt.h"
+#include "base/sn/sn.h"
 #include "cmd.h"
 #include "cmdInt.h"
 #include "misc/util/utilSignal.h"
@@ -605,6 +606,8 @@ int Cmd_CommandAbcPlugIn( Abc_Frame_t * pAbc, int argc, char ** argv )
         {
             Gia_ManStopP( &pAbc->pGia );
             pAbc->pGia = pGia;                
+            Abc_FrameSetGias(pAbc, NULL, 0, 0);
+            Sn_ForgetGiaDescriptor(pAbc);
         }
     }    
 

@@ -209,6 +209,7 @@ void If_ObjPerformMappingAnd( If_Man_t * p, If_Obj_t * pObj, int Mode, int fPrep
             If_CutForEachLeaf( p, pCut, pLeaf, iLeaf )
             {
                 If_Cut_t * pBestCut = If_ObjCutBest( pLeaf );
+                (void)pBestCut;
                 assert( pBestCut != NULL );
                 assert( pBestCut->fUseless == 0 );
                 Delay = IF_MAX( Delay, If_ObjArrTime(pLeaf) + (float)Intrinsic[iLeaf] );
@@ -367,6 +368,7 @@ IfMapBestCutDone:
                         if ( p->pPars->fEnableCheck07 && p->pPars->pCellLib && pCut->nLeaves > 1 )
                         {
                             If_Cut_t * pBestCut = If_ObjCutBest( pLeaf );
+                            (void)pBestCut;
                             assert( pBestCut != NULL );
                             assert( pBestCut->fUseless == 0 );
                         }
@@ -682,7 +684,7 @@ void If_ObjPerformMappingChoice( If_Man_t * p, If_Obj_t * pObj, int Mode, int fP
   SeeAlso     []
 
 ***********************************************************************/
-int If_ManPerformMappingRound( If_Man_t * p, int nCutsUsed, int Mode, int fPreprocess, int fFirst, char * pLabel )
+int If_ManPerformMappingRoundTimed( If_Man_t * p, int nCutsUsed, int Mode, int fPreprocess, int fFirst, char * pLabel, abctime Deadline )
 {
     ProgressBar * pProgress = NULL;
     If_Obj_t * pObj;
@@ -710,6 +712,7 @@ int If_ManPerformMappingRound( If_Man_t * p, int nCutsUsed, int Mode, int fPrepr
         Tim_ManIncrementTravId( p->pManTim );
         If_ManForEachObj( p, pObj, i )
         {
+            if ( Deadline && !(i & 31) && Abc_ClockHr() >= Deadline ) return 0;
             if ( If_ObjIsAnd(pObj) )
             {
                 If_ObjPerformMappingAnd( p, pObj, Mode, fPreprocess, fFirst );
@@ -742,6 +745,8 @@ int If_ManPerformMappingRound( If_Man_t * p, int nCutsUsed, int Mode, int fPrepr
         pProgress = Extra_ProgressBarStart( stdout, If_ManObjNum(p) );
         If_ManForEachNode( p, pObj, i )
         {
+            if ( Deadline && !(i & 31) && Abc_ClockHr() >= Deadline )
+            { Extra_ProgressBarStop( pProgress ); return 0; }
             Extra_ProgressBarUpdate( pProgress, i, pLabel );
             If_ObjPerformMappingAnd( p, pObj, Mode, fPreprocess, fFirst );
             if ( pObj->fRepr )
@@ -769,6 +774,17 @@ int If_ManPerformMappingRound( If_Man_t * p, int nCutsUsed, int Mode, int fPrepr
     }
     return 1;
 }
+
+/**Function*************************************************************
+
+  Synopsis    [Runs one IF mapping round without a deadline.]
+
+***********************************************************************/
+int If_ManPerformMappingRound( If_Man_t * p, int nCutsUsed, int Mode, int fPreprocess, int fFirst, char * pLabel )
+{
+    return If_ManPerformMappingRoundTimed( p, nCutsUsed, Mode, fPreprocess, fFirst, pLabel, 0 );
+}
+
 
 
 ////////////////////////////////////////////////////////////////////////

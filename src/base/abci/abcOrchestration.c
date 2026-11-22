@@ -276,7 +276,8 @@ Rwr_ManAddTimeTotal( pManRwr, Abc_Clock() - clkStart );
 
 Cut_Man_t * Abc_NtkStartCutManForRewrite( Abc_Ntk_t * pNtk )
 {
-    static Cut_Params_t Params, * pParams = &Params;
+    static ABC_THREAD_LOCAL Cut_Params_t Params;
+    Cut_Params_t * pParams = &Params;
     Cut_Man_t * pManCut;
     Abc_Obj_t * pObj;
     int i;
@@ -1735,7 +1736,7 @@ Dec_Graph_t * Abc_ManResubDivs12( Abc_ManRes_t * p, int Required )
                         if ( ((puData0[w] | puData1[w] | puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
                             break;
                 }
-                else assert( 0 );
+                else { assert( 0 ); abort(); }
                 if ( w == p->nWords )
                 {
                     LevelMax = Abc_MaxInt( Abc_ObjRegular(pObj0)->Level, Abc_MaxInt(Abc_ObjRegular(pObj1)->Level, Abc_ObjRegular(pObj2)->Level) );
@@ -1829,7 +1830,7 @@ Dec_Graph_t * Abc_ManResubDivs12( Abc_ManRes_t * p, int Required )
                         if ( ((puData0[w] & puData1[w] & puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
                             break;
                 }
-                else assert( 0 );
+                else { assert( 0 ); abort(); }
                 if ( w == p->nWords )
                 {
                     LevelMax = Abc_MaxInt( Abc_ObjRegular(pObj0)->Level, Abc_MaxInt(Abc_ObjRegular(pObj1)->Level, Abc_ObjRegular(pObj2)->Level) );
@@ -5557,7 +5558,7 @@ Rwr_ManAddTimeUpdate( pManRwr, Abc_Clock() - clk );
     Vec_IntZero(Valid_Ops); // reset updates
         continue;
     }
-    else if ((Valid_Ops->pArray[r] == 1)){
+    else if (Valid_Ops->pArray[r] == 1){
     // apply res
         pManRes->nTotalGain += pManRes->nLastGain;
 clk = Abc_Clock();
@@ -5569,7 +5570,7 @@ pManRes->timeNtk += Abc_Clock() - clk;
     Vec_IntZero(Valid_Ops); // reset updates
         continue;
     }
-    else if ((Valid_Ops->pArray[r] == 2)){
+    else if (Valid_Ops->pArray[r] == 2){
 clk = Abc_Clock();
         if ( !Dec_GraphUpdateNetwork( pNode, pFFormRef, fUpdateLevel, pManRef->nLastGain ) )
                  {
@@ -5671,4 +5672,3 @@ pManRef->timeTotal = Abc_Clock() - clkStart;
 
 
 ABC_NAMESPACE_IMPL_END
-

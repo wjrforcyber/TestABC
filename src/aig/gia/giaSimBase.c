@@ -773,7 +773,8 @@ void Gia_ManSimProfile( Gia_Man_t * pGia )
 void Gia_ManPatSatImprove( Gia_Man_t * p, int nWords0, int fVerbose )
 {
     extern Vec_Int_t * Cbs2_ManSolveMiterNc( Gia_Man_t * pAig, int nConfs, Vec_Str_t ** pvStatus, int fVerbose );
-    int i, Status, Counts[3] = {0};
+    int i, Counts[3] = {0};
+    signed char Status;  // -1 has to stay -1 where plain char is unsigned
     Gia_Man_t * pGia;
     Vec_Wrd_t * vSimsIn = NULL;
     Vec_Str_t * vStatus = NULL;
@@ -1803,6 +1804,7 @@ void Gia_RsbPrint( Gia_RsbMan_t * p )
 {
     Vec_Int_t * vLevel[2]; 
     int n, i, nLeaves = 1 << Vec_IntSize(p->vObjs);
+    (void)nLeaves;
     assert( Vec_WecSize(p->vSets[0]) == nLeaves );
     assert( Vec_WecSize(p->vSets[1]) == nLeaves );
     printf( "Database for %d objects and cost %d:\n", Vec_IntSize(p->vObjs), Gia_RsbCost(p) );
@@ -3762,4 +3764,3 @@ void Gia_ManComparePrint( Gia_Man_t * p, Gia_Man_t * q )
 
 
 ABC_NAMESPACE_IMPL_END
-

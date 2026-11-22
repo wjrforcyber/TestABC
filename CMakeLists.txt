@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5.0)
+cmake_minimum_required(VERSION 3.10)
 
 include(CMakeParseArguments)
 include(CheckCCompilerFlag)
@@ -38,6 +38,14 @@ endfunction()
 
 project(abc)
 
+option(ABC_USE_NO_THREAD_LOCAL "Disable thread-local frame selection" OFF)
+option(ABC_USE_STDIO_REDIRECT "Route output through the current ABC frame (experimental)" OFF)
+if(ABC_USE_STDIO_REDIRECT AND NOT WIN32)
+    # Preserve these files' feature selection ahead of the forced stdio include.
+    set_property(SOURCE src/base/sn/snRead.c src/base/sn/snCom.c APPEND
+        PROPERTY COMPILE_DEFINITIONS _POSIX_C_SOURCE=200809L)
+endif()
+
 if(READLINE_FOUND MATCHES TRUE)
     addprefix(ABC_READLINE_INCLUDES_FLAGS "-I" ${READLINE_INCLUDE})
     string(REPLACE ";" " " ABC_READLINE_INCLUDES_FLAGS "${ABC_READLINE_INCLUDES_FLAGS}")
@@ -53,6 +61,10 @@ if(ABC_USE_NAMESPACE)
     set(ABC_USE_NAMESPACE_FLAGS "ABC_USE_NAMESPACE=${ABC_USE_NAMESPACE}")
 endif()
 
+if(ABC_USE_NO_THREAD_LOCAL)
+    set(ABC_USE_NO_THREAD_LOCAL_FLAGS "ABC_USE_NO_THREAD_LOCAL=1")
+endif()
+
 if( APPLE )
     set(make_env ${CMAKE_COMMAND} -E env SDKROOT=${CMAKE_OSX_SYSROOT})
 endif()
@@ -64,8 +76,10 @@ execute_process(
     make
         ${ABC_READLINE_FLAGS}
         ${ABC_USE_NAMESPACE_FLAGS}
+        ${ABC_USE_NO_THREAD_LOCAL_FLAGS}
         ARCHFLAGS_EXE=${CMAKE_CURRENT_BINARY_DIR}/abc_arch_flags_program.exe
         ABC_MAKE_NO_DEPS=1
+        ABC_USE_STDIO_REDIRECT=0
         CC=${CMAKE_C_COMPILER}
         CXX=${CMAKE_CXX_COMPILER}
         LD=${CMAKE_CXX_COMPILER}
@@ -97,6 +111,13 @@ function(abc_properties target visibility)
     target_include_directories(${target} ${visibility} ${CMAKE_CURRENT_SOURCE_DIR}/src )
     target_compile_options_filtered(${target} ${visibility} ${ABC_CFLAGS} ${ABC_CXXFLAGS} -Wno-unused-but-set-variable )
     target_link_libraries(${target} ${visibility} ${ABC_LIBS})
+    if(ABC_USE_STDIO_REDIRECT)
+        if(MSVC)
+            target_compile_options(${target} PRIVATE "/FI${CMAKE_CURRENT_SOURCE_DIR}/src/misc/util/abc_stdio.h")
+        else()
+            target_compile_options(${target} PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/src/misc/util/abc_stdio.h)
+        endif()
+    endif()
 endfunction()
 
 set(ABC_MAIN_SRC src/base/main/main.c)
@@ -110,14 +131,41 @@ add_executable(abc ${ABC_MAIN_SRC})
 target_link_libraries(abc PRIVATE libabc)
 abc_properties(abc PRIVATE)
 
+option(ABC_USE_SLANG "Build the optional standalone SystemVerilog frontend" OFF)
+if(ABC_USE_SLANG)
+    if(WIN32)
+        message(FATAL_ERROR
+            "ABC_USE_SLANG is not supported on Windows. Build ABC normally; the Slang-independent SN package "
+            "remains available for reading and processing .sn files.")
+    endif()
+    include(ExternalProject)
+    set(SLANG_SOURCE_DIR "" CACHE PATH "Existing Slang checkout (optional)")
+    set(SLANG_JOBS 1 CACHE STRING "Parallel jobs for the independent Slang build")
+    set(SLANG_CXX_COMPILER "${CMAKE_CXX_COMPILER}" CACHE FILEPATH "C++20 compiler for sn")
+    ExternalProject_Add(sn_companion
+        SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tools/sn"
+        BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/sn-slang-build"
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_CXX_COMPILER:FILEPATH=${SLANG_CXX_COMPILER}
+            -DSLANG_SOURCE_DIR:PATH=${SLANG_SOURCE_DIR}
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY:PATH=${CMAKE_CURRENT_BINARY_DIR}/sn-slang-build/bin
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE:PATH=${CMAKE_CURRENT_BINARY_DIR}/sn-slang-build/bin
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+            --target sn --parallel ${SLANG_JOBS}
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <BINARY_DIR>/bin/sn${CMAKE_EXECUTABLE_SUFFIX} $<TARGET_FILE_DIR:abc>
+        BUILD_ALWAYS TRUE
+        DEPENDS abc)
+endif()
+
 add_library(libabc-pic EXCLUDE_FROM_ALL ${ABC_SRC})
 abc_properties(libabc-pic PUBLIC)
 set_property(TARGET libabc-pic PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET libabc-pic PROPERTY OUTPUT_NAME abc-pic)
 
-add_definitions(-DASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/test/")
-
-if(NOT DEFINED ABC_SKIP_TESTS)
+option(ABC_SKIP_TESTS "Skip configuring the optional test suite" OFF)
+if(NOT ABC_SKIP_TESTS)
     enable_testing()
     include(FetchContent)
     FetchContent_Declare(
@@ -130,6 +178,3 @@ if(NOT DEFINED ABC_SKIP_TESTS)
     include(GoogleTest)
     add_subdirectory(test)
 endif()
-
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/test/data DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/test)
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/NangateOpenCellLibrary_typical.lib DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/test)

@@ -172,6 +172,8 @@ extern void        Extra_MmStepEntryRecycle( Extra_MmStep_t * p, char * pEntry, 
 extern int         Extra_MmStepReadMemUsage( Extra_MmStep_t * p );
 
 /*=== extraUtilMisc.c ========================================================*/
+struct Vec_Wrd_t_;
+extern void         Extra_BitMatrixTransposeP( struct Vec_Wrd_t_ * vSimsIn, int nWordsIn, struct Vec_Wrd_t_ * vSimsOut, int nWordsOut );
 
 /* finds the smallest integer larger or equal than the logarithm */
 extern int         Extra_Base2LogDouble( double Num );
@@ -406,10 +408,10 @@ extern char *        Extra_UtilPrintTime( long t );
 extern char *        Extra_UtilStrsav( const char *s );
 extern char *        Extra_UtilTildeExpand( char *fname );
 extern char *        Extra_UtilFileSearch( char *file, char *path, char *mode );
-extern void          (*Extra_UtilMMoutOfMemory)( long size );
+extern ABC_THREAD_LOCAL void (*Extra_UtilMMoutOfMemory)( long size );
 
-extern const char *  globalUtilOptarg;
-extern int           globalUtilOptind;
+extern ABC_THREAD_LOCAL const char * globalUtilOptarg;
+extern ABC_THREAD_LOCAL int          globalUtilOptind;
 
 /**AutomaticEnd***************************************************************/
 

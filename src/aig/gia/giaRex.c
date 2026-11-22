@@ -47,6 +47,7 @@ void Gia_ManAutomSimulate( Gia_Man_t * p, Vec_Int_t * vAlpha, char * pSim )
 {
     Gia_Obj_t * pObj, * pObjRi, * pObjRo;
     int nInputs = Vec_IntSize(vAlpha);
+    (void)nInputs;
     int nFrames = strlen(pSim);
     int i, k;
     assert( Gia_ManPiNum(p) == nInputs );
@@ -430,7 +431,7 @@ void Gia_ManAutomWalkOne( Gia_Man_t * p, int nSteps, Vec_Wrd_t * vStates, Vec_In
                 continue;
             Index = Vec_WrdFind( vStates, pNext[k] );
             Count = Index == -1 ? 0 : Vec_IntEntry( vCounts, Index );
-            if ( CountMin > Count || (CountMin != ABC_INFINITY && Count && ((float)CountMin / Count) > (float)rand()/RAND_MAX ) )
+            if ( CountMin > Count || (CountMin != ABC_INFINITY && Count && ((float)CountMin / Count) > (float)rand()/(float)RAND_MAX ) )
             {
                 CountMin = Count;
                 IndexMin = Index;
@@ -542,4 +543,3 @@ void Gia_ManAutomWalk( Gia_Man_t * p, int nSteps, int nWalks, int fVerbose )
 
 
 ABC_NAMESPACE_IMPL_END
-

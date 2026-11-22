@@ -766,7 +766,7 @@ static double sat_solver_progress(sat_solver* s)
 //=================================================================================================
 // Major methods:
 
-static int sat_solver_lit_removable(sat_solver* s, int x, int minl)
+static int sat_solver_lit_removable(sat_solver* s, int x, unsigned minl)
 {
     int      top     = veci_size(&s->tagged);
 
@@ -780,7 +780,7 @@ static int sat_solver_lit_removable(sat_solver* s, int x, int minl)
         if (clause_is_lit(s->reasons[v])){
             v = lit_var(clause_read_lit(s->reasons[v]));
             if (!var_tag(s,v) && var_level(s, v)){
-                if (s->reasons[v] != 0 && ((1 << (var_level(s, v) & 31)) & minl)){
+                if (s->reasons[v] != 0 && ((1U << (var_level(s, v) & 31)) & minl)){
                     veci_push(&s->stack,v);
                     var_set_tag(s, v, 1);
                 }else{
@@ -795,7 +795,7 @@ static int sat_solver_lit_removable(sat_solver* s, int x, int minl)
             for (i = 1; i < clause_size(c); i++){
                 int v = lit_var(lits[i]);
                 if (!var_tag(s,v) && var_level(s, v)){
-                    if (s->reasons[v] != 0 && ((1 << (var_level(s, v) & 31)) & minl)){
+                    if (s->reasons[v] != 0 && ((1U << (var_level(s, v) & 31)) & minl)){
                         veci_push(&s->stack,lit_var(lits[i]));
                         var_set_tag(s, v, 1);
                     }else{
@@ -914,7 +914,8 @@ static void sat_solver_analyze(sat_solver* s, int h, veci* learnt)
     lit      p       = lit_Undef;
     int      ind     = s->qtail-1;
     lit*     lits;
-    int      i, j, minl;
+    int      i, j;
+    unsigned minl;
     veci_push(learnt,lit_Undef);
     do{
         assert(h != 0);
@@ -965,7 +966,7 @@ static void sat_solver_analyze(sat_solver* s, int h, veci* learnt)
     minl = 0;
     for (i = 1; i < veci_size(learnt); i++){
         int lev = var_level(s, lit_var(lits[i]));
-        minl    |= 1 << (lev & 31);
+        minl    |= 1U << (lev & 31);
     }
 
     // simplify (full)
@@ -1522,14 +1523,15 @@ int sat_solver_simplify(sat_solver* s)
 
 void sat_solver_reducedb(sat_solver* s)
 {
-    static abctime TimeTotal = 0;
-    abctime clk = Abc_Clock();
+    int fVerbose = s->fVerbose;
+    abctime clk;
     Sat_Mem_t * pMem = &s->Mem;
     int nLearnedOld = veci_size(&s->act_clas);
     int * act_clas = veci_begin(&s->act_clas);
     int * pPerm, * pArray, * pSortValues, nCutoffValue;
     int i, k, j, Id, Counter, CounterStart, nSelected;
     clause * c;
+    ABC_TIME_START(fVerbose, clk);
 
     assert( s->nLearntMax > 0 );
     assert( nLearnedOld == Sat_MemEntryNum(pMem, 1) );
@@ -1629,12 +1631,12 @@ void sat_solver_reducedb(sat_solver* s)
     assert( Counter == (int)s->stats.learnts );
 
     // report the results
-    TimeTotal += Abc_Clock() - clk;
-    if ( s->fVerbose )
+    ABC_TIME_STOP(fVerbose, s->timeReduceDb, clk);
+    if ( fVerbose )
     {
     Abc_Print(1, "reduceDB: Keeping %7d out of %7d clauses (%5.2f %%)  ",
         s->stats.learnts, nLearnedOld, 100.0 * s->stats.learnts / nLearnedOld );
-    Abc_PrintTime( 1, "Time", TimeTotal );
+    Abc_PrintTime( 1, "Time", s->timeReduceDb );
     }
 }
 
@@ -1644,8 +1646,6 @@ void sat_solver_rollback( sat_solver* s )
 {
     Sat_Mem_t * pMem = &s->Mem;
     int i, k, j;
-    static int Count = 0;
-    Count++;
     assert( s->iVarPivot >= 0 && s->iVarPivot <= s->size );
     assert( s->iTrailPivot >= 0 && s->iTrailPivot <= s->qtail );
     // reset implication queue
@@ -1822,6 +1822,7 @@ static lbool sat_solver_search(sat_solver* s, ABC_INT64_T nof_conflicts)
     ABC_INT64_T  conflictC  = 0;
     veci    learnt_clause;
     int     i;
+    unsigned nStopChecks = 0;
 
     assert(s->root_level == sat_solver_dl(s));
 
@@ -1844,7 +1845,26 @@ static lbool sat_solver_search(sat_solver* s, ABC_INT64_T nof_conflicts)
             act_var_bump_global(s, s->act_vars.ptr[i]);
 
     for (;;){
-        int hConfl = sat_solver_propagate(s);
+        int hConfl;
+        // Poll inside long searches, including when restarts are disabled.
+        if ( (s->pFuncStop || s->pStopFlag || s->nRuntimeLimit) && !(nStopChecks++ & 255) &&
+             ((s->nRuntimeLimit && Abc_Clock() > s->nRuntimeLimit) ||
+              sat_solver_cancelled(s)) )
+        {
+            s->fStopRequested = 1;
+            sat_solver_canceluntil( s, s->root_level );
+            veci_delete( &learnt_clause );
+            return l_Undef;
+        }
+        // Multi-stage clients need an exact shared budget. The historical
+        // default checks only after a conflict-free propagation and may exceed it.
+        if (s->fExactConfLimit && s->nConfLimit && s->stats.conflicts >= s->nConfLimit){
+            s->progress_estimate = sat_solver_progress(s);
+            sat_solver_canceluntil(s,s->root_level);
+            veci_delete(&learnt_clause);
+            return l_Undef;
+        }
+        hConfl = sat_solver_propagate(s);
         if (hConfl != 0){
             // CONFLICT
             int blevel;
@@ -1945,6 +1965,7 @@ int sat_solver_solve_internal(sat_solver* s)
     int restart_iter = 0;
     veci_resize(&s->unit_lits, 0);
     s->nCalls++;
+    s->fStopRequested = 0;
 
     if (s->verbosity >= 1){
         printf("==================================[MINISAT]===================================\n");
@@ -1975,14 +1996,19 @@ int sat_solver_solve_internal(sat_solver* s)
         nof_conflicts = (ABC_INT64_T)( 100 * luby(2, restart_iter++) );
         status = sat_solver_search(s, nof_conflicts);
         // quit the loop if reached an external limit
-        if ( s->nConfLimit && s->stats.conflicts > s->nConfLimit )
+        if ( s->fStopRequested )
+            break;
+        if ( s->nConfLimit && (s->fExactConfLimit ? s->stats.conflicts >= s->nConfLimit : s->stats.conflicts > s->nConfLimit) )
             break;
         if ( s->nInsLimit  && s->stats.propagations > s->nInsLimit )
             break;
         if ( s->nRuntimeLimit && Abc_Clock() > s->nRuntimeLimit )
             break;
-        if ( s->pFuncStop && s->pFuncStop(s->RunId) )
+        if ( sat_solver_cancelled(s) )
+        {
+            s->fStopRequested = 1;
             break;
+        }
     }
     if (s->verbosity >= 1)
         printf("==============================================================================\n");
@@ -2322,6 +2348,7 @@ int sat_solver_minimize_assumptions2( sat_solver* s, int * pLits, int nLits, int
             {
                 int LitNot = Abc_LitNot(pLits[i]);
                 int RetValue = sat_solver_addclause( s, &LitNot, &LitNot+1 );
+                (void)RetValue;
                 assert( RetValue );
             }
 
@@ -2352,6 +2379,7 @@ int sat_solver_minimize_assumptions2( sat_solver* s, int * pLits, int nLits, int
             {
                 int LitNot = Abc_LitNot(pLits[i]);
                 int RetValue = sat_solver_addclause( s, &LitNot, &LitNot+1 );
+                (void)RetValue;
                 assert( RetValue );
             }
 
@@ -2431,4 +2459,3 @@ void * sat_solver_store_release( sat_solver * s )
 
 
 ABC_NAMESPACE_IMPL_END
-

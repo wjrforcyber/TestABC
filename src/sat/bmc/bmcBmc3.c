@@ -31,13 +31,6 @@
 
 ABC_NAMESPACE_IMPL_START
 
-static inline void Bmc3_CadicalSetRuntimeLimit( cadical_solver * pSat4, abctime nSeconds )
-{
-    if ( pSat4 == NULL || nSeconds <= 0 )
-        return;
-    ccadical_limit( (CCaDiCaL *)pSat4->p, "seconds", nSeconds );
-}
-
 ////////////////////////////////////////////////////////////////////////
 ///                        DECLARATIONS                              ///
 ////////////////////////////////////////////////////////////////////////
@@ -74,13 +67,110 @@ struct Gia_ManBmc_t_
     satoko_t *        pSat2;       // SAT solver
     bmcg_sat_solver * pSat3;       // SAT solver
     cadical_solver *  pSat4;       // SAT solver
+    abctime           timeCadicalStop;
+    abctime           timeCnfStop;
+    unsigned          nCnfVisits;
+    int               fPollCnf, fCnfStopped;
     int               nSatVars;    // SAT variables
     int               nObjNums;    // SAT objects
     int               nWordNum;    // unsigned words for ternary simulation
+    int               nMemoryLimit, fMemoryLimit;
+    unsigned          nMemoryPolls;
+    double            MemoryPeak;
     char * pSopSizes, ** pSops;    // CNF representation
 };
 
 extern int Gia_ManToBridgeResult( FILE * pFile, int Result, Abc_Cex_t * pCex, int iPoProved );
+
+/**Function*************************************************************
+
+  Synopsis    [Checks the outer deadline and cancellation during fixed-depth unrolling.]
+
+***********************************************************************/
+static inline int Saig_Bmc3CnfStop( Gia_ManBmc_t * p, int fAtFrame )
+{
+    if ( p->fPollCnf && !p->fCnfStopped && (fAtFrame || !(++p->nCnfVisits & 4095)) )
+        p->fCnfStopped = (p->timeCnfStop && Abc_Clock() >= p->timeCnfStop) ||
+                         (p->pPars->pFuncStop && p->pPars->pFuncStop(p->pPars->RunId));
+    return p->fCnfStopped;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Forwards cooperative cancellation into a Glucose query.]
+
+  Description [Uses the callback and run identifier supplied by the caller.]
+
+  SideEffects []
+
+  SeeAlso     [Saig_ManBmcScalable]
+
+***********************************************************************/
+static int Saig_Bmc3GlucoseStop( void * pData )
+{
+    Saig_ParBmc_t * pPars = (Saig_ParBmc_t *)pData;
+    return pPars->pFuncStop && pPars->pFuncStop( pPars->RunId );
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Checks the CaDiCaL query deadline and the caller's stop request.]
+
+***********************************************************************/
+static int Saig_Bmc3CadicalStop( void * pData )
+{
+    Gia_ManBmc_t * p = (Gia_ManBmc_t *)pData;
+    return (p->timeCadicalStop && Abc_Clock() >= p->timeCadicalStop) ||
+           (p->pPars->pFuncStop && p->pPars->pFuncStop(p->pPars->RunId));
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Checks an optional memory budget owned by this BMC instance.]
+
+  Description [The estimate includes retained frame maps, the current solver
+  allocation, and the unroller's mapping and hash storage.]
+
+  SideEffects [Latches exhaustion until this manager is destroyed.]
+
+  SeeAlso     [Saig_ManBmcScalablePortfolio]
+
+***********************************************************************/
+static int Saig_Bmc3MemoryStop( Gia_ManBmc_t * p )
+{
+    double Memory;
+    if ( !p->nMemoryLimit ) return 0;
+    if ( p->fMemoryLimit ) return 1;
+    Memory = sizeof(*p) + (4.0 * p->nObjNums + 4.0 * p->nWordNum +
+        sizeof(Vec_Int_t) + 2 * sizeof(void *)) * Vec_PtrSize(p->vId2Var);
+    Memory += Vec_IntMemory(p->vMapping) + Vec_IntMemory(p->vMapRefs) +
+        Vec_IntMemory(p->vId2Num) + Vec_IntMemory(p->vId2Lit) + Vec_IntMemory(p->vData);
+    Memory += Vec_IntMemory(p->vHash->vTable) + Vec_WrdMemory(p->vHash->vObjs);
+    Memory += 8.0 * p->nSatVars + sizeof(Vec_Int_t) * (double)Vec_WecCap(p->vVisited);
+    Memory += p->pSat3 ? bmcg_sat_solver_memory(p->pSat3) : sat_solver_memory(p->pSat);
+    if ( Memory > p->MemoryPeak ) p->MemoryPeak = Memory;
+    p->fMemoryLimit = Memory >= (double)p->nMemoryLimit * (1 << 20);
+    return p->fMemoryLimit;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Combines cooperative stop requests with sampled memory checks.]
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     [Saig_Bmc3MemoryStop]
+
+***********************************************************************/
+static int Saig_Bmc3LimitedGlucoseStop( void * pData )
+{
+    Gia_ManBmc_t * p = (Gia_ManBmc_t *)pData;
+    if ( p->pPars->pFuncStop && p->pPars->pFuncStop(p->pPars->RunId) ) return 1;
+    if ( p->fMemoryLimit ) return 1;
+    return !(++p->nMemoryPolls & 4095) && Saig_Bmc3MemoryStop(p);
+}
 
 void Gia_ManReportProgress( FILE * pFile, int prop_no, int depth )
 {
@@ -126,13 +216,13 @@ static inline void Saig_ManBmcSimInfoSet( unsigned * pInfo, Aig_Obj_t * pObj, in
 {
     assert( Value >= SAIG_TER_ZER && Value <= SAIG_TER_UND );
     Value ^= Saig_ManBmcSimInfoGet( pInfo, pObj );
-    pInfo[Aig_ObjId(pObj) >> 4] ^= (Value << ((Aig_ObjId(pObj) & 15) << 1));
+    pInfo[Aig_ObjId(pObj) >> 4] ^= ((unsigned)Value << ((Aig_ObjId(pObj) & 15) << 1));
 }
 
 static inline int Saig_ManBmcSimInfoClear( unsigned * pInfo, Aig_Obj_t * pObj )
 {
     int Value = Saig_ManBmcSimInfoGet( pInfo, pObj );
-    pInfo[Aig_ObjId(pObj) >> 4] ^= (Value << ((Aig_ObjId(pObj) & 15) << 1));
+    pInfo[Aig_ObjId(pObj) >> 4] ^= ((unsigned)Value << ((Aig_ObjId(pObj) & 15) << 1));
     return Value;
 }
 
@@ -1077,6 +1167,7 @@ int Saig_ManBmcCreateCnf_rec( Gia_ManBmc_t * p, Aig_Obj_t * pObj, int iFrame )
     iLit = Saig_ManBmcLiteral( p, pObj, iFrame );
     if ( iLit != ~0 )
         return iLit; 
+    if ( Saig_Bmc3CnfStop(p, 0) ) return -1;
     assert( iFrame >= 0 );
     if ( Aig_ObjIsCi(pObj) )
     {
@@ -1084,11 +1175,13 @@ int Saig_ManBmcCreateCnf_rec( Gia_ManBmc_t * p, Aig_Obj_t * pObj, int iFrame )
             iLit = toLit( p->nSatVars++ );
         else
             iLit = Saig_ManBmcCreateCnf_rec( p, Saig_ObjLoToLi(p->pAig, pObj), iFrame-1 );
+        if ( iLit < 0 ) return -1;
         return Saig_ManBmcSetLiteral( p, pObj, iFrame, iLit );
     }
     if ( Aig_ObjIsCo(pObj) )
     {
         iLit = Saig_ManBmcCreateCnf_rec( p, Aig_ObjFanin0(pObj), iFrame );
+        if ( iLit < 0 ) return -1;
         if ( Aig_ObjFaninC0(pObj) )
             iLit = lit_neg(iLit);
         return Saig_ManBmcSetLiteral( p, pObj, iFrame, iLit );
@@ -1098,8 +1191,8 @@ int Saig_ManBmcCreateCnf_rec( Gia_ManBmc_t * p, Aig_Obj_t * pObj, int iFrame )
     for ( i = 0; i < 4; i++ )
         if ( pMapping[i+1] == -1 )
             Lits[i] = -1;
-        else
-            Lits[i] = Saig_ManBmcCreateCnf_rec( p, Aig_ManObj(p->pAig, pMapping[i+1]), iFrame );
+        else if ( (Lits[i] = Saig_ManBmcCreateCnf_rec(p, Aig_ManObj(p->pAig, pMapping[i+1]), iFrame)) < 0 )
+            return -1;
     uTruth = 0xffff & (unsigned)pMapping[0];
     // propagate constants
     uTruth = Saig_ManBmcReduceTruth( uTruth, Lits );
@@ -1163,6 +1256,7 @@ void Saig_ManBmcCreateCnf_iter( Gia_ManBmc_t * p, Aig_Obj_t * pObj, int iFrame, 
         return; 
     if ( Aig_ObjIsTravIdCurrent(p->pAig, pObj) )
         return;
+    if ( Saig_Bmc3CnfStop(p, 0) ) return;
     Aig_ObjSetTravIdCurrent(p->pAig, pObj);
     if ( Aig_ObjIsCi(pObj) )
     {
@@ -1201,6 +1295,7 @@ int Saig_ManBmcRunTerSim_rec( Gia_ManBmc_t * p, Aig_Obj_t * pObj, int iFrame )
 {
     unsigned * pInfo = (unsigned *)Vec_PtrEntry( p->vTerInfo, iFrame );
     int Val0, Val1, Value = Saig_ManBmcSimInfoGet( pInfo, pObj );
+    if ( Saig_Bmc3CnfStop(p, 0) ) return SAIG_TER_UND;
     if ( Value != SAIG_TER_NON )
     {
 /*
@@ -1279,6 +1374,7 @@ int Saig_ManBmcCreateCnf( Gia_ManBmc_t * p, Aig_Obj_t * pObj, int iFrame )
     int Lit, f, i;
     // perform ternary simulation
     int Value = Saig_ManBmcRunTerSim_rec( p, pObj, iFrame );
+    if ( p->fCnfStopped ) return -1;
     if ( Value != SAIG_TER_UND )
         return (int)(Value == SAIG_TER_ONE);
     // construct CNF if value is ternary
@@ -1288,6 +1384,7 @@ int Saig_ManBmcCreateCnf( Gia_ManBmc_t * p, Aig_Obj_t * pObj, int iFrame )
     Vec_IntPush( vVisit, Aig_ObjId(pObj) );
     for ( f = iFrame; f >= 0; f-- )
     {
+        if ( Saig_Bmc3CnfStop(p, 1) ) return -1;
         Aig_ManIncrementTravId( p->pAig );
         vVisit2 = Vec_WecPushLevel( p->vVisited );
         vVisit = Vec_WecEntry( p->vVisited, Vec_WecSize(p->vVisited)-2 );
@@ -1297,8 +1394,11 @@ int Saig_ManBmcCreateCnf( Gia_ManBmc_t * p, Aig_Obj_t * pObj, int iFrame )
             break;
     }
     Vec_WecForEachLevelReverse( p->vVisited, vVisit, f )
+    {
+        if ( Saig_Bmc3CnfStop(p, 1) ) return -1;
         Aig_ManForEachObjVec( vVisit, p->pAig, pTemp, i )
-            Saig_ManBmcCreateCnf_rec( p, pTemp, iFrame-f );
+            if ( Saig_ManBmcCreateCnf_rec(p, pTemp, iFrame-f) < 0 ) return -1;
+    }
     Lit = Saig_ManBmcLiteral( p, pObj, iFrame );
     // extend the SAT solver
     if ( p->pSat2 )
@@ -1360,6 +1460,7 @@ int Aig_NodeCompareRefsIncrease( Aig_Obj_t ** pp1, Aig_Obj_t ** pp2 )
 void Saig_ParBmcSetDefaultParams( Saig_ParBmc_t * p )
 {
     memset( p, 0, sizeof(Saig_ParBmc_t) );
+    p->timeCnfStop    =    -1;
     p->nStart         =     0;    // maximum number of timeframes 
     p->nFramesMax     =     0;    // maximum number of timeframes 
     p->nConfLimit     =     0;    // maximum number of conflicts at a node
@@ -1495,7 +1596,8 @@ int Saig_ManCallSolver( Gia_ManBmc_t * p, int Lit )
   SeeAlso     []
 
 ***********************************************************************/
-int Saig_ManBmcScalable( Aig_Man_t * pAig, Saig_ParBmc_t * pPars )
+static int Saig_ManBmcScalableInt( Aig_Man_t * pAig, Saig_ParBmc_t * pPars,
+    int nMemoryLimit, Bmc_Shared_t * pShared, Bmc_Stats_t * pStats, int fNoSimplification )
 {
     Gia_ManBmc_t * p;
     Aig_Obj_t * pObj;
@@ -1504,7 +1606,7 @@ int Saig_ManBmcScalable( Aig_Man_t * pAig, Saig_ParBmc_t * pPars )
     unsigned * pInfo;
     int RetValue = -1, fFirst = 1, nJumpFrame = 0, fUnfinished = 0;
     int nOutDigits = Abc_Base10Log( Saig_ManPoNum(pAig) );
-    int i, f, k, Lit, status;
+    int i, f, k, Lit, status, nFramesShared = 0;
     abctime clk, clk2, clkSatRun, clkOther = 0, clkTotal = Abc_Clock();
     abctime nTimeUnsat = 0, nTimeSat = 0, nTimeUndec = 0, clkOne = 0;
     abctime nTimeToStopNG, nTimeToStop;
@@ -1519,6 +1621,9 @@ int Saig_ManBmcScalable( Aig_Man_t * pAig, Saig_ParBmc_t * pPars )
     // create BMC manager
     p = Saig_Bmc3ManStart( pAig, pPars->nTimeOutOne, pPars->nConfLimit, pPars->fUseSatoko, pPars->fUseGlucose, pPars->fUseCadical );
     p->pPars = pPars;
+    p->timeCnfStop = pPars->timeCnfStop < 0 ? nTimeToStopNG : pPars->timeCnfStop;
+    p->fPollCnf = pPars->nStart > 0 && (p->timeCnfStop || pPars->pFuncStop);
+    p->nMemoryLimit = nMemoryLimit;
     if ( p->pSat )
     {
         p->pSat->nLearntStart = p->pPars->nLearnedStart;
@@ -1531,12 +1636,21 @@ int Saig_ManBmcScalable( Aig_Man_t * pAig, Saig_ParBmc_t * pPars )
     }
     else if ( p->pSat3 )
     {
-//        satoko_set_runid(p->pSat3, p->pPars->RunId);
-//        satoko_set_stop_func(p->pSat3, p->pPars->pFuncStop);
+        if ( fNoSimplification )
+        {
+            int Status = bmcg_sat_solver_disable_simplification( p->pSat3 );
+            assert( Status );
+            (void)Status;
+        }
+        if ( nMemoryLimit )
+            bmcg_sat_solver_set_stop_func( p->pSat3, p, Saig_Bmc3LimitedGlucoseStop );
+        else if ( pPars->pFuncStop )
+            bmcg_sat_solver_set_stop_func( p->pSat3, pPars, Saig_Bmc3GlucoseStop );
     }
     else if ( p->pSat4 )
     {
-
+        if ( nTimeToStop || pPars->nTimeOutOne || pPars->pFuncStop )
+            ccadical_set_terminate( (CCaDiCaL *)p->pSat4->p, p, Saig_Bmc3CadicalStop );
     }
     else
     {
@@ -1561,8 +1675,8 @@ int Saig_ManBmcScalable( Aig_Man_t * pAig, Saig_ParBmc_t * pPars )
             satoko_set_runtime_limit( p->pSat2, nTimeToStop );
         else if ( p->pSat3 )
             bmcg_sat_solver_set_runtime_limit( p->pSat3, nTimeToStop );
-        else if ( p-> pSat4 )
-            Bmc3_CadicalSetRuntimeLimit( p->pSat4, nTimeToStop );
+        else if ( p->pSat4 )
+            p->timeCadicalStop = nTimeToStop;
         else
             sat_solver_set_runtime_limit( p->pSat, nTimeToStop );
     }
@@ -1571,12 +1685,17 @@ int Saig_ManBmcScalable( Aig_Man_t * pAig, Saig_ParBmc_t * pPars )
     pPars->timeLastSolved = Abc_Clock();
     for ( f = 0; f < pPars->nFramesMax; f++ )
     {
+        if ( Saig_Bmc3CnfStop(p, 1) ) goto finish;
+        if ( nMemoryLimit && Saig_Bmc3MemoryStop(p) ) goto finish;
+        if ( pShared && pPars->pFuncStop && pPars->pFuncStop(pPars->RunId) ) goto finish;
+        if ( pShared && nTimeToStop && Abc_Clock() > nTimeToStop ) goto finish;
         if ( pPars->pFuncProgress && pPars->pFuncProgress( pPars->pProgress, 0, (unsigned)f ) )
             goto finish;
         // stop BMC after exploring all reachable states
         if ( !pPars->nFramesJump && Aig_ManRegNum(pAig) < 30 && f == (1 << Aig_ManRegNum(pAig)) )
         {
-            Abc_Print( 1, "Stopping BMC because all 2^%d reachable states are visited.\n", Aig_ManRegNum(pAig) );
+            if ( !pPars->fSilent )
+                Abc_Print( 1, "Stopping BMC because all 2^%d reachable states are visited.\n", Aig_ManRegNum(pAig) );
             if ( p->pPars->fUseBridge )
                 Saig_ManForEachPo( pAig, pObj, i )
                     if ( !(p->vCexes && Vec_PtrEntry(p->vCexes, i)) && !(p->pTime4Outs && p->pTime4Outs[i] == 0) ) // not SAT and not timed out
@@ -1622,6 +1741,11 @@ int Saig_ManBmcScalable( Aig_Man_t * pAig, Saig_ParBmc_t * pPars )
         }
         if ( (pPars->nStart && f < pPars->nStart) || (nJumpFrame && f < nJumpFrame) )
             continue;
+        if ( pShared && pShared->pFuncFrames(pShared->pData, 0) > f )
+        {
+            nFramesShared++;
+            continue;
+        }
         // create CNF upfront
         if ( pPars->fSolveAll )
         {
@@ -1649,7 +1773,7 @@ int Saig_ManBmcScalable( Aig_Man_t * pAig, Saig_ParBmc_t * pPars )
                     continue;
                 // add constraints for this output
 clk2 = Abc_Clock();
-                Saig_ManBmcCreateCnf( p, pObj, f );
+                if ( Saig_ManBmcCreateCnf(p, pObj, f) < 0 ) goto finish;
 clkOther += Abc_Clock() - clk2;
             }
         }
@@ -1689,6 +1813,8 @@ clkOther += Abc_Clock() - clk2;
 clk2 = Abc_Clock();
             Lit = Saig_ManBmcCreateCnf( p, pObj, f );
 clkOther += Abc_Clock() - clk2;
+            if ( Lit < 0 ) goto finish;
+            if ( nMemoryLimit && Saig_Bmc3MemoryStop(p) ) goto finish;
             // solve this output
             fUnfinished = 0;
             if ( p->pSat ) sat_solver_compress( p->pSat );
@@ -1700,8 +1826,8 @@ clkOther += Abc_Clock() - clk2;
                     satoko_set_runtime_limit( p->pSat2, p->pTime4Outs[i] + Abc_Clock() );
                 else if ( p->pSat3 )
                     bmcg_sat_solver_set_runtime_limit( p->pSat3, p->pTime4Outs[i] + Abc_Clock() );
-                else if ( p-> pSat4 )
-                    Bmc3_CadicalSetRuntimeLimit( p->pSat4, p->pTime4Outs[i] + Abc_Clock() );
+                else if ( p->pSat4 )
+                    p->timeCadicalStop = p->pTime4Outs[i] + Abc_Clock();
                 else
                     sat_solver_set_runtime_limit( p->pSat, p->pTime4Outs[i] + Abc_Clock() );
             }
@@ -1819,7 +1945,7 @@ nTimeSat += clkSatRun;
                     else if ( p->pSat3 )
                         bmcg_sat_solver_set_runtime_limit( p->pSat3, nTimeToStop );
                     else if ( p->pSat4 )
-                        Bmc3_CadicalSetRuntimeLimit ( p->pSat4, nTimeToStop );
+                        p->timeCadicalStop = nTimeToStop;
                     else
                         sat_solver_set_runtime_limit( p->pSat, nTimeToStop );
                 }
@@ -1835,6 +1961,12 @@ nTimeSat += clkSatRun;
                         continue;
                     // check if this output is solved
                     Lit = Saig_ManBmcCreateCnf( p, pObj, f );
+                    if ( Lit < 0 )
+                    {
+                        Abc_CexFreeP( &pCexNew0 );
+                        Abc_CexFree( pCexNew );
+                        goto finish;
+                    }
                     if ( p->pSat2 )
                     {
                         if ( satoko_read_cex_varvalue(p->pSat2, lit_var(Lit)) == Abc_LitIsCompl(Lit) )
@@ -1891,6 +2023,7 @@ nTimeUndec += clkSatRun;
                     goto finish;
             }
         }
+        if ( pShared ) pShared->pFuncFrames( pShared->pData, f + 1 );
         if ( pPars->fVerbose ) 
         {
             if ( fFirst == 1 && f > 0 && (p->pSat ? p->pSat->stats.conflicts : p->pSat4 ? cadical_solver_nconflicts(p->pSat4) : p->pSat3 ? bmcg_sat_solver_conflictnum(p->pSat3) : satoko_conflictnum(p->pSat2)) > 1 )
@@ -1932,6 +2065,17 @@ nTimeUndec += clkSatRun;
         pPars->iFrame = f-1;
 //ABC_PRT( "CNF generation runtime", clkOther );
 finish:
+    if ( pStats )
+    {
+        pStats->nFramesShared = nFramesShared;
+        pStats->fMemoryLimit = p->fMemoryLimit;
+        pStats->MemoryPeakMB = p->MemoryPeak / (1 << 20);
+    }
+    if ( pShared && pPars->fVerbose )
+        Abc_Print( 1, "BMC shared prefix skipped %d frame queries.\n", nFramesShared );
+    if ( p->fMemoryLimit && !pPars->fSilent )
+        Abc_Print( 1, "BMC reached its estimated memory budget (%d MiB, observed %.1f MiB).\n",
+            nMemoryLimit, p->MemoryPeak / (1 << 20) );
     if ( pPars->fVerbose )
     {
         Abc_Print( 1, "Runtime:  " );
@@ -1946,6 +2090,44 @@ finish:
     if ( pLogFile )
         fclose( pLogFile );
     return RetValue;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Runs scalable BMC with its established resource behavior.]
+
+  Description []
+
+  SideEffects [May store a counterexample in the input AIG.]
+
+  SeeAlso     [Saig_ManBmcScalablePortfolio]
+
+***********************************************************************/
+int Saig_ManBmcScalable( Aig_Man_t * pAig, Saig_ParBmc_t * pPars )
+{
+    return Saig_ManBmcScalableInt( pAig, pPars, 0, NULL, NULL, 0 );
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Runs portfolio BMC without unused Glucose preprocessing lists.]
+
+  Description [BMC never invokes Glucose simplification. This opt-in entry
+  omits its bookkeeping while preserving clauses, search settings and limits.]
+
+  SideEffects [May store a counterexample and update the supplied statistics.]
+
+  SeeAlso     [Saig_ManBmcScalable]
+
+***********************************************************************/
+int Saig_ManBmcScalablePortfolio( Aig_Man_t * pAig, Saig_ParBmc_t * pPars,
+    int nMemoryLimit, Bmc_Shared_t * pShared, Bmc_Stats_t * pStats )
+{
+    if ( pStats ) memset( pStats, 0, sizeof(*pStats) );
+    if ( nMemoryLimit < 0 || (nMemoryLimit && (pPars->fUseSatoko || pPars->fUseCadical)) ) return -1;
+    if ( pShared && (!pShared->pFuncFrames || !Aig_ManRegNum(pAig) || pPars->fSolveAll || pPars->nFramesJump ||
+         pPars->nStart || pPars->nTimeOutOne || pPars->fUseSatoko || pPars->fUseCadical) ) return -1;
+    return Saig_ManBmcScalableInt( pAig, pPars, nMemoryLimit, pShared, pStats, 1 );
 }
 
 ////////////////////////////////////////////////////////////////////////

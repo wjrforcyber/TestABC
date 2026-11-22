@@ -612,6 +612,20 @@ extern ABC_DLL void               Abc_NodeGetCutsSeq( void * p, Abc_Obj_t * pObj
 extern ABC_DLL void *             Abc_NodeReadCuts( void * p, Abc_Obj_t * pObj );
 extern ABC_DLL void               Abc_NodeFreeCuts( void * p, Abc_Obj_t * pObj );
 /*=== abcDar.c ============================================================*/
+struct Dch_Pars_t_;
+extern ABC_DLL Abc_Ntk_t *        Abc_NtkDch( Abc_Ntk_t * pNtk, struct Dch_Pars_t_ * pPars );
+// Native LUT mapping and SAT sweeping are also callable from C++ packages.
+struct If_Par_t_;
+struct Sfm_Par_t_;
+extern ABC_DLL Abc_Ntk_t *        Abc_NtkIf( Abc_Ntk_t * pNtk, struct If_Par_t_ * pPars );
+extern ABC_DLL int                Abc_NtkPerformMfs( Abc_Ntk_t * pNtk, struct Sfm_Par_t_ * pPars );
+struct Aig_Man_t_;
+struct Saig_ParBmc_t_;
+struct Pdr_Par_t_;
+extern ABC_DLL struct Aig_Man_t_ * Abc_NtkToDar( Abc_Ntk_t * pNtk, int fExors, int fRegisters );
+extern ABC_DLL Abc_Ntk_t *        Abc_NtkFromAigPhase( struct Aig_Man_t_ * pMan );
+extern ABC_DLL int                Abc_NtkDarBmc3( Abc_Ntk_t * pNtk, struct Saig_ParBmc_t_ * pPars, int fOrDecomp );
+extern ABC_DLL int                Abc_NtkDarPdr( Abc_Ntk_t * pNtk, struct Pdr_Par_t_ * pPars );
 extern ABC_DLL int                Abc_NtkPhaseFrameNum( Abc_Ntk_t * pNtk );
 extern ABC_DLL int                Abc_NtkDarPrintCone( Abc_Ntk_t * pNtk );
 extern ABC_DLL Abc_Ntk_t *        Abc_NtkBalanceExor( Abc_Ntk_t * pNtk, int fUpdateLevel, int fVerbose );
@@ -652,6 +666,9 @@ extern ABC_DLL int                Abc_ExactInputNum();
 extern ABC_DLL int                Abc_ExactIsRunning();
 extern ABC_DLL Abc_Obj_t *        Abc_ExactBuildNode( word * pTruth, int nVars, int * pArrTimeProfile, Abc_Obj_t ** pFanins, Abc_Ntk_t * pNtk );
 extern ABC_DLL Abc_Ntk_t *        Abc_NtkFindExact( word * pTruth, int nVars, int nFunc, int nMaxDepth, int * pArrivalTimes, int nBTLimit, int nStartGates, int fVerbose );
+/*=== abcLutAbsorb.c ========================================================*/
+struct If_LibLut_t_;
+extern ABC_DLL int                Abc_NtkLutAbsorb( Abc_Ntk_t * pNtk, int nLutSize, int nFanoutMax, int nRounds, int fVerbose, struct If_LibLut_t_ * pLutLib, float * pfAreaGain );
 /*=== abcFanio.c ==========================================================*/
 extern ABC_DLL void               Abc_ObjAddFanin( Abc_Obj_t * pObj, Abc_Obj_t * pFanin );
 extern ABC_DLL void               Abc_ObjDeleteFanin( Abc_Obj_t * pObj, Abc_Obj_t * pFanin );
@@ -673,6 +690,8 @@ extern ABC_DLL Abc_Ntk_t *        Abc_NtkFraigTrust( Abc_Ntk_t * pNtk );
 extern ABC_DLL int                Abc_NtkFraigStore( Abc_Ntk_t * pNtk );
 extern ABC_DLL Abc_Ntk_t *        Abc_NtkFraigRestore( int nPatsRand, int nPatsDyna, int nBTLimit );
 extern ABC_DLL void               Abc_NtkFraigStoreClean();
+//=== abcFx.c ===============================================================
+extern ABC_DLL int                Abc_NtkFxPerform( Abc_Ntk_t * pNtk, int nNewNodesMax, int LitCountMax, int fCanonDivs, int fVerbose, int fVeryVerbose );
 /*=== abcFunc.c ==========================================================*/
 extern ABC_DLL int                Abc_NtkSopToBdd( Abc_Ntk_t * pNtk );
 extern ABC_DLL int                Abc_NtkBddToSop( Abc_Ntk_t * pNtk, int fMode, int nCubeLimit, int fCubeSort );
@@ -681,6 +700,7 @@ extern ABC_DLL void               Abc_NtkLogicMakeDirectSops( Abc_Ntk_t * pNtk )
 extern ABC_DLL int                Abc_NtkSopToAig( Abc_Ntk_t * pNtk );
 extern ABC_DLL int                Abc_NtkAigToBdd( Abc_Ntk_t * pNtk );
 extern ABC_DLL Gia_Man_t *        Abc_NtkAigToGia( Abc_Ntk_t * p, int fGiaSimple );
+extern ABC_DLL Gia_Man_t *        Abc_NtkStrashToGia( Abc_Ntk_t * pNtk );
 extern ABC_DLL int                Abc_NtkMapToSopUsingLibrary( Abc_Ntk_t * pNtk, void* library );
 extern ABC_DLL int                Abc_NtkMapToSop( Abc_Ntk_t * pNtk );
 extern ABC_DLL int                Abc_NtkToSop( Abc_Ntk_t * pNtk, int fMode, int nCubeLimit );
@@ -830,6 +850,7 @@ extern ABC_DLL int                Abc_NodeIsBuf( Abc_Obj_t * pNode );
 extern ABC_DLL int                Abc_NodeIsInv( Abc_Obj_t * pNode );    
 extern ABC_DLL void               Abc_NodeComplement( Abc_Obj_t * pNode );
 extern ABC_DLL void               Abc_NodeComplementInput( Abc_Obj_t * pNode, Abc_Obj_t * pFanin );
+extern ABC_DLL void               Abc_NodeComplementInputAt( Abc_Obj_t * pNode, int iFanin );
 /*=== abcOdc.c ==========================================================*/
 typedef struct Odc_Man_t_         Odc_Man_t;
 extern ABC_DLL Odc_Man_t *        Abc_NtkDontCareAlloc( int nVarsMax, int nLevels, int fVerbose, int fVeryVerbose );

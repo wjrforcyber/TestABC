@@ -76,6 +76,8 @@ void Sfm_NtkPrintStats( Sfm_Ntk_t * p )
     p->timeOther = p->timeTotal - p->timeWin - p->timeDiv - p->timeCnf - p->timeSat;
     printf( "Nodes = %d. Try = %d. Resub = %d. Div = %d (ave = %d). SAT calls = %d. Timeouts = %d. MaxDivs = %d.\n",
         Sfm_NtkNodeNum(p), p->nNodesTried, p->nRemoves + p->nResubs, p->nTotalDivs, p->nTotalDivs/Abc_MaxInt(1, p->nNodesTried), p->nSatCalls, p->nTimeOuts, p->nMaxDivs );
+    if ( p->vBoxPins )
+        printf( "Box order: rejected %d divisor candidates.\n", p->nBoxRejects );
 
     printf( "Attempts :   " );
     printf( "Remove %6d out of %6d (%6.2f %%)   ", p->nRemoves, p->nTryRemoves, 100.0*p->nRemoves/Abc_MaxInt(1, p->nTryRemoves) );
@@ -116,6 +118,7 @@ int Sfm_NodeResubSolve( Sfm_Ntk_t * p, int iNode, int f, int fRemoveOnly )
     int i, iFanin, iVar = -1;
     int iFaninRem = -1, iFaninSkip = -1;
     int nFanins = Sfm_ObjFaninNum(p, iNode); 
+    (void)nFanins;
     word uTruth, uSign, uMask;
     abctime clk;
     assert( Sfm_ObjIsNode(p, iNode) );
@@ -175,7 +178,8 @@ p->timeSat += Abc_Clock() - clk;
         // find the next divisor to try
         uMask = (~(word)0) >> (64 - p->nCexes);
         Vec_WrdForEachEntry( p->vDivCexes, uSign, iVar )
-            if ( uSign == uMask && Vec_IntEntry(p->vDivs, iVar) != iFaninSkip )
+            if ( uSign == uMask && Vec_IntEntry(p->vDivs, iVar) != iFaninSkip &&
+                 (!p->vBoxPins || Sfm_NtkCheckBoxOrder(p, Vec_IntEntry(p->vDivs, iVar))) )
                 break;
         if ( iVar == Vec_IntSize(p->vDivs) )
             return 0;
@@ -364,9 +368,9 @@ void Sfm_NtkPrint( Sfm_Ntk_t * p )
   SeeAlso     []
 
 ***********************************************************************/
-int Sfm_NtkPerform( Sfm_Ntk_t * p, Sfm_Par_t * pPars )
+int Sfm_NtkPerformTimed( Sfm_Ntk_t * p, Sfm_Par_t * pPars, abctime Deadline )
 {
-    int i, k, Counter = 0, CounterLarge = 0;
+    int i, k, Counter = 0, CounterLarge = 0, nNodesTried = 0;
     //Sfm_NtkPrint( p );
     p->timeTotal = Abc_Clock();
     if ( pPars->fVerbose )
@@ -395,13 +399,14 @@ int Sfm_NtkPerform( Sfm_Ntk_t * p, Sfm_Par_t * pPars )
             CounterLarge++;
             continue;
         }
-        for ( k = 0; Sfm_NodeResub(p, i); k++ )
+        if ( Deadline && Abc_ClockHr() >= Deadline ) break;
+        for ( k = 0; (!Deadline || Abc_ClockHr() < Deadline) && Sfm_NodeResub(p, i); k++ )
         {
 //            Counter++;
 //            break;
         }
         Counter += (k > 0);
-        if ( pPars->nNodesMax && Counter >= pPars->nNodesMax )
+        if ( pPars->nNodesMax && ++nNodesTried >= pPars->nNodesMax )
             break;
     }
     p->nTotalNodesEnd = Vec_WecSizeUsedLimits( &p->vFanins, Sfm_NtkPiNum(p), Vec_WecSize(&p->vFanins) - Sfm_NtkPoNum(p) );
@@ -415,10 +420,19 @@ int Sfm_NtkPerform( Sfm_Ntk_t * p, Sfm_Par_t * pPars )
     return Counter;
 }
 
+/**Function*************************************************************
+
+  Synopsis    [Optimizes the mapped network without a deadline.]
+
+***********************************************************************/
+int Sfm_NtkPerform( Sfm_Ntk_t * p, Sfm_Par_t * pPars )
+{
+    return Sfm_NtkPerformTimed(p, pPars, 0);
+}
+
 ////////////////////////////////////////////////////////////////////////
 ///                       END OF FILE                                ///
 ////////////////////////////////////////////////////////////////////////
 
 
 ABC_NAMESPACE_IMPL_END
-

@@ -62,7 +62,7 @@ int * Abc_SclHashLookup( SC_Lib * p, char * pName )
     assert( 0 );
     return NULL;
 }
-void Abc_SclHashCells( SC_Lib * p )
+int Abc_SclHashCells( SC_Lib * p )
 {
     SC_Cell * pCell;
     int i, * pPlace;
@@ -72,11 +72,14 @@ void Abc_SclHashCells( SC_Lib * p )
     SC_LibForEachCell( p, pCell, i )
     {
         pPlace = Abc_SclHashLookup( p, pCell->pName );
-        if ( *pPlace != -1 && pCell->pName )
+        if ( *pPlace != -1 )
+        {
             printf( "There are two standard cells with the same name (%s).\n", pCell->pName );
-        assert( *pPlace == -1 );
+            return 0;
+        }
         *pPlace = i;
     }
+    return 1;
 }
 int Abc_SclCellFind( SC_Lib * p, char * pName )
 {
@@ -609,7 +612,7 @@ float Abc_SclComputeAreaClass( SC_Cell * pRepr )
 void Abc_SclMarkSkippedCells( SC_Lib * p )
 {
     char FileName[1000];
-    char Buffer[1000], * pName;
+    char Buffer[1000], * pName, * pSave;
     SC_Cell * pCell;
     FILE * pFile;
     int CellId, nSkipped = 0;
@@ -619,7 +622,8 @@ void Abc_SclMarkSkippedCells( SC_Lib * p )
         return;
     while ( fgets( Buffer, 999, pFile ) != NULL )
     {
-        pName = strtok( Buffer, "\r\n\t " );
+        pSave = NULL;
+        pName = Abc_UtilStrtok( Buffer, "\r\n\t ", &pSave );
         if ( pName == NULL )
             continue;
         CellId = Abc_SclCellFind( p, pName );

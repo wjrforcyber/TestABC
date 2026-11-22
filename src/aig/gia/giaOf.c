@@ -1064,6 +1064,7 @@ static inline int Of_CutAreaDerefed( Of_Man_t * p, int * pCut )
 {
     int Ela1 = Of_CutRef_rec( p, pCut );
     int Ela2 = Of_CutDeref_rec( p, pCut );
+    (void)Ela2;
     assert( Ela1 == Ela2 );
     return Ela1;
 }
@@ -1304,7 +1305,7 @@ void Of_ManComputeBackward3( Of_Man_t * p )
 void Of_ManComputeForwardDirconCut( Of_Man_t * p, int iObj, int * pCut, int * pDelay1, int * pDelay2 )
 {
     // Delay1 - main delay;  Delay2 - precomputed LUT delay in terms of Delay1 for the fanins
-    int Delays[6], Perm[6] = {0, 1, 2, 3, 4, 5}; 
+    int Delays[6] = {0}, Perm[6] = {0, 1, 2, 3, 4, 5};
     int DelayLut1 = p->pPars->nDelayLut1;
     int DelayLut2 = p->pPars->nDelayLut2;
     int nSize = Of_CutSize(pCut);
@@ -1863,4 +1864,3 @@ Gia_Man_t * Of_ManPerformMapping( Gia_Man_t * pGia, Jf_Par_t * pPars )
 
 
 ABC_NAMESPACE_IMPL_END
-

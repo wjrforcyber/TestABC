@@ -165,6 +165,55 @@ Vec_Str_t * Gia_AigerWriteLiterals( Vec_Int_t * vLits )
 
 /**Function*************************************************************
 
+  Synopsis    [Updates a decoded cell cover after constraint or reset normalization.]
+
+  Description [These rewrites can change CI polarity and reorder or complement
+  outputs. Reset expansion for unknown initial values introduces unmapped logic.]
+
+***********************************************************************/
+static int Gia_AigerUpdateCellMapping( Gia_Man_t * p, Vec_Int_t * vFileIds, int nCis, int nAnds )
+{
+    Gia_Obj_t * pObj;
+    int i, k, Lit, Fan;
+    if ( Gia_ManCiNum(p) != nCis || Gia_ManAndNum(p) != nAnds )
+        return 0;
+    // The record offsets refer to the original CI and AND IDs.
+    for ( i = 1; i <= nCis+nAnds; ++i )
+    {
+        int Copy = Vec_IntEntry(vFileIds, i);
+        if ( Copy != Abc_Var2Lit(i, 0) && !(i <= nCis && Copy == Abc_Var2Lit(i, 1)) )
+            return 0;
+        if ( Abc_LitIsCompl(Copy) )
+            Vec_IntWriteEntry(p->vCellMapping, Abc_Var2Lit(i, 1), 0);
+    }
+    Gia_ManForEachCell( p, Lit )
+    {
+        if ( Gia_ObjIsCellInv(p, Lit) ) continue;
+        Gia_CellForEachFanin( p, Lit, Fan, k )
+            if ( Abc_LitIsCompl(Vec_IntEntry(vFileIds, Abc_Lit2Var(Fan))) )
+            {
+                Gia_ObjCellFanins(p, Lit)[k] = Abc_LitNot(Fan);
+                if ( !Abc_LitIsCompl(Fan) )
+                    Vec_IntWriteEntry(p->vCellMapping, Abc_LitNot(Fan), -1);
+            }
+    }
+    // An inverted constraint or register input may need the other phase
+    // of a cell already in the cover.
+    Gia_ManForEachCo( p, pObj, i )
+    {
+        Lit = Gia_ObjFaninLit0p(p, pObj);
+        if ( Lit < 2 || Gia_ObjIsCell(p, Lit) ||
+             (!Abc_LitIsCompl(Lit) && Gia_ObjIsCi(Gia_ObjFanin0(pObj))) )
+            continue;
+        if ( !Gia_ObjIsCi(Gia_ObjFanin0(pObj)) && !Gia_ObjIsCell(p, Abc_LitNot(Lit)) )
+            return 0;
+        Vec_IntWriteEntry(p->vCellMapping, Lit, -1);
+    }
+    return 1;
+}
+
+/**Function*************************************************************
+
   Synopsis    [Reads the AIG in the binary AIGER format.]
 
   Description []
@@ -174,16 +223,17 @@ Vec_Str_t * Gia_AigerWriteLiterals( Vec_Int_t * vLits )
   SeeAlso     []
 
 ***********************************************************************/
-Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSimple, int fSkipStrash, int fCheck )
+static Gia_Man_t * Gia_AigerReadFromMemoryInt( char * pContents, int nFileSize, int fGiaSimple, int fSkipStrash, int fCheck, Vec_Int_t ** pvFileIds )
 {
     Gia_Man_t * pNew, * pTemp;
     Vec_Ptr_t * vNamesIn = NULL, * vNamesOut = NULL, * vNamesRegIn = NULL, * vNamesRegOut = NULL, * vNamesNode = NULL;
     Vec_Int_t * vLits = NULL, * vPoTypes = NULL;
     Vec_Int_t * vNodes, * vDrivers, * vInits = NULL;
-    int iObj, iNode0, iNode1, fHieOnly = 0;
+    Vec_Int_t * vFileIds = NULL, * vCellMapping = NULL;
+    int iObj, iNode0, iNode1, fHieOnly = 0, fUpdateCellMapping = 0;
     int nTotal, nInputs, nOutputs, nLatches, nAnds, i;
     int nBad = 0, nConstr = 0, nJust = 0, nFair = 0;
-    unsigned char * pDrivers, * pSymbols, * pCur;
+    unsigned char * pDrivers, * pSymbols, * pCur, * pCellData = NULL, * pCellEnd = NULL;
     unsigned uLit0, uLit1, uLit;
 
     // read the parameters (M I L O A + B C J F)
@@ -374,6 +424,15 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
 
     // create the latches
     Gia_ManSetRegNum( pNew, nLatches );
+    if ( pvFileIds )
+    {
+        vFileIds = vNodes;
+        vNodes = NULL;
+        for ( i = 0; i < Gia_ManCoNum(pNew); i++ )
+            Vec_IntPush( vFileIds, Gia_Obj2Lit(pNew, Gia_ManCo(pNew, i)) );
+    }
+    else if ( !fGiaSimple && !fSkipStrash )
+        Vec_IntFreeP( &vNodes );
 
     // read signal names if they are of the special type
     pCur = pSymbols;
@@ -745,16 +804,40 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
             // read mapping
             else if ( *pCur == 'm' )
             {
-                extern int * Gia_AigerReadMapping( unsigned char ** ppPos, int nSize );
-                extern int * Gia_AigerReadMappingSimple( unsigned char ** ppPos, int nSize );
                 extern Vec_Int_t * Gia_AigerReadMappingDoc( unsigned char ** ppPos, int nObjs );
+                unsigned char * end = (unsigned char *)pContents + nFileSize;
                 int nSize;
-                pCur++;
-                nSize = Gia_AigerReadInt(pCur);
-                pCurTemp = pCur + nSize + 4;           pCur += 4;
-                pNew->vMapping = Gia_AigerReadMappingDoc( &pCur, Gia_ManObjNum(pNew) );
-                assert( pCur == pCurTemp );
+                if ( end - ++pCur < 4 ) break;
+                nSize = Gia_AigerReadInt(pCur); pCur += 4;
+                if ( nSize < 8 || nSize > end - pCur ) break;
+                // LUT roots and leaves refer to object IDs in the file.
+                if ( (fSkipStrash || fGiaSimple) && Gia_ManAndNum(pNew) == nAnds )
+                {
+                    pCurTemp = pCur + nSize;
+                    pNew->vMapping = Gia_AigerReadMappingDoc( &pCur, Gia_ManObjNum(pNew) );
+                    assert( pCur == pCurTemp );
+                }
+                else
+                {
+                    pCur += nSize;
+                    Abc_Print( 0, "Structural hashing enabled while reading AIGER invalidated the mapping.  Consider using \"&r -s\".\n" );
+                }
                 if ( fVerbose ) printf( "Finished reading extension \"m\".\n" );
+            }
+            // Named standard-cell mapping. The file literals must have their original IDs.
+            else if ( *pCur == 'M' )
+            {
+                unsigned char * end = (unsigned char *)pContents + nFileSize;
+                int nSize;
+                if ( end - ++pCur < 4 ) break;
+                nSize = Gia_AigerReadInt(pCur); pCur += 4;
+                if ( nSize < 0 || nSize > end - pCur ) break;
+                if ( fSkipStrash || fGiaSimple )
+                {
+                    pCellData = pCur;
+                    pCellEnd = pCur+nSize;
+                }
+                pCur += nSize;
             }
             // read model name
             else if ( *pCur == 'n' )
@@ -832,25 +915,23 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
             // read configuration data for extension "j"
             else if ( *pCur == 'j' )
             {
-                int nSize, Reserved, NumCellTypes, CellId, BytesPerInstance, TotalInstances;
+                int nSize, NumCellTypes;
                 pCur++;
                 nSize = Gia_AigerReadInt(pCur);
                 pCurTemp = pCur + nSize + 4;                            pCur += 4;
                 // Read reserved value (should be 0)
-                Reserved = Gia_AigerReadInt(pCur);                      pCur += 4;
-                assert( Reserved == 0 );
+                assert( Gia_AigerReadInt(pCur) == 0 );                  pCur += 4;
                 // Read number of cell types
                 NumCellTypes = Gia_AigerReadInt(pCur);                  pCur += 4;
                 // Skip cell type definitions (we know them already)
                 for ( i = 0; i < NumCellTypes; i++ )
                 {
-                    CellId = Gia_AigerReadInt(pCur);                    pCur += 4;
+                    pCur += 4; // cell ID
                     // Skip function description string (null-terminated)
                     while ( *pCur++ != '\0' );
-                    BytesPerInstance = Gia_AigerReadInt(pCur);          pCur += 4;
+                    pCur += 4; // bytes per instance
                 }
-                // Read total number of instances
-                TotalInstances = Gia_AigerReadInt(pCur);                pCur += 4;
+                pCur += 4; // total number of instances
                 // Create byte vector for instance data
                 pNew->vConfigs2 = Vec_StrAlloc( (int)(pCurTemp - pCur) );
                 // Read instance data as bytes
@@ -952,17 +1033,39 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
         }
     }
 
-    // skipping the comments
-    Vec_IntFree( vNodes );
-
     // update polarity of the additional outputs
     if ( nBad || nConstr || nJust || nFair )
+    {
         Gia_ManInvertConstraints( pNew );
+        if ( vFileIds )
+            for ( i = Gia_ManPoNum(pNew) - Gia_ManConstrNum(pNew); i < Gia_ManPoNum(pNew); i++ )
+                Vec_IntWriteEntry( vFileIds, nTotal + 1 + i, Vec_IntEntry(vFileIds, nTotal + 1 + i) ^ 1 );
+    }
+
+    // The writer encodes constraint outputs in the opposite AIGER polarity.
+    // Validate the mapping after restoring the GIA outputs, then retain it
+    // across any subsequent manager replacement or change of register phase.
+    if ( pCellData )
+    {
+        vCellMapping = Gia_AigerReadCellMappingDoc(pNew, pCellData, pCellEnd);
+        if ( !vCellMapping )
+            Abc_Print(0, "Cell mapping could not be restored. Load the matching cell library before &read -s.\n");
+        else if ( !vFileIds )
+        {
+            // Only CI and AND literals are needed to update the mapped pins.
+            vFileIds = vNodes;
+            vNodes = NULL;
+        }
+    }
+    Vec_IntFreeP( &vNodes );
 
     // clean the PO drivers
     if ( vPoTypes )
     {
         pNew = Gia_ManDupWithConstraints( pTemp = pNew, vPoTypes );
+        fUpdateCellMapping = 1;
+        if ( vFileIds )
+            Gia_ManDupRemapLiterals( vFileIds, pTemp );
         Gia_ManStop( pTemp );
         Vec_IntFreeP( &vPoTypes );
     }
@@ -980,6 +1083,8 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
         pManTime = (Tim_Man_t *)pNew->pManTime; pNew->pManTime = NULL;
         pAigExtra   = pNew->pAigExtra;    pNew->pAigExtra      = NULL;
         pNew = Gia_ManCleanup( pTemp = pNew );
+        if ( vFileIds )
+            Gia_ManDupRemapLiterals( vFileIds, pTemp );
         if ( (vGateMap || vObjMap) && (Gia_ManObjNum(pNew) < Gia_ManObjNum(pTemp)) )
             printf( "Cleanup removed objects after reading. Old gate/object abstraction maps are invalid!\n" );
         Gia_ManStop( pTemp );
@@ -992,11 +1097,17 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
         pNew->pAigExtra    = pAigExtra;
     }
 
-    // Apply init state transformation for register boxes with init=1
-    if ( pNew->vRegInits && Vec_IntCountEntry(pNew->vRegInits, 1) > 0 )
+    // Keep explicit regular-flop initialization when structural hashing is skipped.
+    // Register boxes retain their existing initialization handling.
+    if ( pNew->vRegInits && Vec_IntCountEntry(pNew->vRegInits, 1) > 0 &&
+         (!fSkipStrash || (pNew->pManTime && Gia_ManRegBoxNum(pNew) > 0)) )
     {
         extern void Gia_ManFlipInit1( Gia_Man_t * p, Vec_Int_t * vInit );
         Tim_Man_t * pTimMan = (Tim_Man_t *)pNew->pManTime;
+        fUpdateCellMapping = 1;
+        if ( vFileIds )
+            for ( i = 0; i < Gia_ManObjNum(pNew); i++ )
+                Gia_ManObj(pNew, i)->Value = Abc_Var2Lit(i, 0);
 
         if ( pTimMan && Gia_ManRegBoxNum(pNew) > 0 )
         {
@@ -1020,6 +1131,8 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
                     {
                         pObj = Gia_ManCi(pNew, curCi);
                         pObj->fMark0 = 1;
+                        if ( vFileIds )
+                            pObj->Value ^= 1;
                     }
                     iRegBox++;
                 }
@@ -1062,7 +1175,7 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
             }
 
             // Step 5: Complement register box inputs with init state 1
-            curCo = Tim_ManPoNum(pTimMan);
+            curCo = 0;
             iRegBox = 0;
             for ( i = 0; i < Gia_ManBoxNum(pNew); i++ )
             {
@@ -1074,6 +1187,8 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
                     {
                         pObj = Gia_ManCo(pNew, curCo);
                         pObj->fCompl0 ^= 1;
+                        if ( vFileIds )
+                            pObj->Value ^= 1;
                     }
                     iRegBox++;
                 }
@@ -1086,18 +1201,28 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
         else if ( Gia_ManRegNum(pNew) > 0 )
         {
             // Handle regular flops (no boxes)
+            if ( vFileIds )
+                for ( i = 0; i < Gia_ManRegNum(pNew); i++ )
+                    if ( Vec_IntEntry(pNew->vRegInits, i) == 1 )
+                    {
+                        Gia_ManRo(pNew, i)->Value ^= 1;
+                        Gia_ManRi(pNew, i)->Value ^= 1;
+                    }
             Gia_ManFlipInit1( pNew, pNew->vRegInits );
             // Clear all init states to 0 (transformation is now structural)
             Vec_IntFill( pNew->vRegInits, Vec_IntSize(pNew->vRegInits), 0 );
         }
+        if ( vFileIds )
+            Gia_ManDupRemapLiterals( vFileIds, pNew );
     }
 
     if ( fHieOnly )
     {
+        void * pLibBox = Abc_FrameReadGlobalFrame() ? Abc_FrameReadLibBox() : NULL;
 //        Tim_ManPrint( (Tim_Man_t *)pNew->pManTime );
-        if ( Abc_FrameReadLibBox() == NULL )
+        if ( pLibBox == NULL )
             printf( "Warning: Creating unit-delay box delay tables because box library is not available.\n" );
-        Tim_ManCreate( (Tim_Man_t *)pNew->pManTime, Abc_FrameReadLibBox(), pNew->vInArrs, pNew->vOutReqs );
+        Tim_ManCreate( (Tim_Man_t *)pNew->pManTime, pLibBox, pNew->vInArrs, pNew->vOutReqs );
     }
     Vec_FltFreeP( &pNew->vInArrs );
     Vec_FltFreeP( &pNew->vOutReqs );
@@ -1134,16 +1259,31 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
         if ( !fSkipStrash ) 
         {
             pNew = Gia_ManDupZeroUndc( pTemp = pNew, pInit, 0, fGiaSimple, 1 );
+            fUpdateCellMapping = 1;
             pNew->nConstrs = pTemp->nConstrs; pTemp->nConstrs = 0;
+            if ( vFileIds )
+                Gia_ManDupRemapLiterals( vFileIds, pTemp );
             Gia_ManStop( pTemp );
+        }
+        else if ( pNew->vRegInits == NULL )
+        {
+            // Preserve AIGER initialization for &put: 0, 1, or 2 (don't-care).
+            // The ABC extension, when present, already supplies this information.
+            pNew->vRegInits = Vec_IntAlloc( Gia_ManRegNum(pNew) );
+            for ( i = 0; i < Gia_ManRegNum(pNew); i++ )
+                Vec_IntPush( pNew->vRegInits, pInit[i] == '0' ? 0 : pInit[i] == '1' ? 1 : 2 );
         }
         ABC_FREE( pInit );
     }
     Vec_IntFreeP( &vInits );
-    if ( !fGiaSimple && !fSkipStrash && pNew->vMapping )
+    if ( vCellMapping )
     {
-        Abc_Print( 0, "Structural hashing enabled while reading AIGER invalidated the mapping.  Consider using \"&r -s\".\n" );
-        Vec_IntFreeP( &pNew->vMapping );
+        pNew->vCellMapping = vCellMapping;
+        if ( fUpdateCellMapping && !Gia_AigerUpdateCellMapping(pNew, vFileIds, nTotal-nAnds, nAnds) )
+        {
+            Vec_IntFreeP(&pNew->vCellMapping);
+            Abc_Print(0, "Cell mapping cannot cover the rewritten initialization logic. Use &read -s to preserve it.\n");
+        }
     }
     if ( vNamesIn && Gia_ManPiNum(pNew) != Vec_PtrSize(vNamesIn) )
         Abc_Print( 0, "The number of inputs does not match the number of input names.\n" );
@@ -1169,6 +1309,7 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
             Vec_PtrFree( vNamesRegIn );
             vNamesRegIn = NULL;
         }
+        Gia_ManRenameFlopOutputs( pNew );
     }
     if ( vNamesNode && Gia_ManObjNum(pNew) != Vec_PtrSize(vNamesNode) )
         Abc_Print( 0, "The size of the node name array does not match the number of objects. Names are not entered.\n" );
@@ -1178,7 +1319,15 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
     if ( vNamesOut ) Vec_PtrFreeFree( vNamesOut );
     if ( vNamesRegIn ) Vec_PtrFreeFree( vNamesRegIn );
     if ( vNamesRegOut ) Vec_PtrFreeFree( vNamesRegOut );
+    if ( pvFileIds )
+        *pvFileIds = vFileIds;
+    else
+        Vec_IntFreeP( &vFileIds );
     return pNew;
+}
+Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSimple, int fSkipStrash, int fCheck )
+{
+    return Gia_AigerReadFromMemoryInt( pContents, nFileSize, fGiaSimple, fSkipStrash, fCheck, NULL );
 }
 
 /**Function*************************************************************
@@ -1192,23 +1341,26 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
   SeeAlso     []
 
 ***********************************************************************/
-Gia_Man_t * Gia_AigerRead( char * pFileName, int fGiaSimple, int fSkipStrash, int fCheck )
+Gia_Man_t * Gia_AigerReadWithMapping( char * pFileName, int fGiaSimple, int fSkipStrash, int fCheck, Vec_Int_t ** pvFileIds )
 {
     FILE * pFile;
     Gia_Man_t * pNew;
     char * pName, * pContents;
     int nFileSize;
     int RetValue;
+    if ( pvFileIds )
+        *pvFileIds = NULL;
 
     // read the file into the buffer
     Gia_FileFixName( pFileName );
     nFileSize = Gia_FileSize( pFileName );
-    pFile = fopen( pFileName, "rb" );
+    if ( nFileSize <= 0 || (pFile = fopen(pFileName, "rb")) == NULL )
+        return NULL;
     pContents = ABC_ALLOC( char, nFileSize );
     RetValue = fread( pContents, nFileSize, 1, pFile );
     fclose( pFile );
 
-    pNew = Gia_AigerReadFromMemory( pContents, nFileSize, fGiaSimple, fSkipStrash, fCheck );
+    pNew = RetValue == 1 ? Gia_AigerReadFromMemoryInt( pContents, nFileSize, fGiaSimple, fSkipStrash, fCheck, pvFileIds ) : NULL;
     ABC_FREE( pContents );
     if ( pNew )
     {
@@ -1221,6 +1373,10 @@ Gia_Man_t * Gia_AigerRead( char * pFileName, int fGiaSimple, int fSkipStrash, in
         pNew->pSpec = Abc_UtilStrsav( pFileName );
     }
     return pNew;
+}
+Gia_Man_t * Gia_AigerRead( char * pFileName, int fGiaSimple, int fSkipStrash, int fCheck )
+{
+    return Gia_AigerReadWithMapping( pFileName, fGiaSimple, fSkipStrash, fCheck, NULL );
 }
 
 
@@ -1386,31 +1542,36 @@ Vec_Str_t * Gia_AigerWriteIntoMemoryStrPart( Gia_Man_t * p, Vec_Int_t * vCis, Ve
 
 /**Function*************************************************************
 
-  Synopsis    [Writes the AIG in the binary AIGER format.]
+  Synopsis    [Writes binary AIGER and reports whether the stream closed successfully.]
 
-  Description []
-  
-  SideEffects []
-
-  SeeAlso     []
+  Description [Callers publishing a saved mapping can discard a failed write.
+  Timing and name attributes borrowed during normalization return to the input.]
 
 ***********************************************************************/
-void Gia_AigerWriteS( Gia_Man_t * pInit, char * pFileName, int fWriteSymbols, int fCompact, int fWriteNewLine, int fSkipComment )
+int Gia_AigerWriteChecked( Gia_Man_t * pInit, const char * pFileName, int fWriteSymbols, int fCompact, int fWriteNewLine, int fSkipComment )
 {
     int fVerbose = XAIG_VERBOSE;
     FILE * pFile;
     Gia_Man_t * p;
     Gia_Obj_t * pObj;
     Vec_Str_t * vStrExt;
-    int i, nBufferSize, Pos;
+    int i, fSuccess = 0;
+    size_t nBufferSize, Pos;
     unsigned char * pBuffer;
     unsigned uLit0, uLit1, uLit;
-    assert( pInit->nXors == 0 && pInit->nMuxes == 0 );
+    if ( Gia_ManXorNum(pInit) || Gia_ManMuxNum(pInit) )
+    {
+        // Keep each expanded XOR's three ANDs adjacent and unshared.
+        p = Gia_ManDupExpand( pInit );
+        fSuccess = Gia_AigerWriteChecked( p, pFileName, fWriteSymbols, fCompact, fWriteNewLine, fSkipComment );
+        Gia_ManStop( p );
+        return fSuccess;
+    }
 
     if ( Gia_ManCoNum(pInit) == 0 )
     {
         printf( "AIG cannot be written because it has no POs.\n" );
-        return;
+        return 0;
     }
 
     // start the output stream
@@ -1418,7 +1579,7 @@ void Gia_AigerWriteS( Gia_Man_t * pInit, char * pFileName, int fWriteSymbols, in
     if ( pFile == NULL )
     {
         fprintf( stdout, "Gia_AigerWrite(): Cannot open the output file \"%s\".\n", pFileName );
-        return;
+        return 0;
     }
 
     // create normalized AIG
@@ -1426,7 +1587,20 @@ void Gia_AigerWriteS( Gia_Man_t * pInit, char * pFileName, int fWriteSymbols, in
     {
 //        printf( "Gia_AigerWrite(): Normalizing AIG for writing.\n" );
         p = Gia_ManDupNormalize( pInit, 0 );
+        if ( pInit->vEquLitIds )
+        {
+            // Rows follow the serialized object order; spec literals do not change.
+            assert( Vec_IntSize(pInit->vEquLitIds) == Gia_ManObjNum(pInit) );
+            p->vEquLitIds = Vec_IntStartFull( Gia_ManObjNum(p) );
+            Gia_ManForEachObj( pInit, pObj, i )
+                Vec_IntWriteEntry( p->vEquLitIds, Abc_Lit2Var(pObj->Value), Vec_IntEntry(pInit->vEquLitIds, i) );
+        }
         Gia_ManTransferMapping( p, pInit );
+        if ( Gia_ManHasCellMapping(pInit) )
+        {
+            extern void Gia_ManTransferCellMapping( Gia_Man_t *, Gia_Man_t * );
+            Gia_ManTransferCellMapping(p, pInit);
+        }
         Gia_ManTransferPacking( p, pInit );
         Gia_ManTransferTiming( p, pInit );
         p->nConstrs   = pInit->nConstrs;
@@ -1469,23 +1643,25 @@ void Gia_AigerWriteS( Gia_Man_t * pInit, char * pFileName, int fWriteSymbols, in
 
     // write the nodes into the buffer
     Pos = 0;
-    nBufferSize = 8 * Gia_ManAndNum(p) + 100; // skeptically assuming 3 chars per one AIG edge
+    if ( (size_t)Gia_ManAndNum(p) > ((size_t)-1 - 100) / 8 )
+        goto finish;
+    nBufferSize = 8 * (size_t)Gia_ManAndNum(p) + 100;
     pBuffer = ABC_ALLOC( unsigned char, nBufferSize );
+    if ( !pBuffer )
+        goto finish;
     Gia_ManForEachAnd( p, pObj, i )
     {
         uLit  = Abc_Var2Lit( i, 0 );
         uLit0 = Gia_ObjFaninLit0( pObj, i );
         uLit1 = Gia_ObjFaninLit1( pObj, i );
         assert( p->fGiaSimple || Gia_ManBufNum(p) || uLit0 < uLit1 );
-        Pos = Gia_AigerWriteUnsignedBuffer( pBuffer, Pos, uLit  - uLit1 );
-        Pos = Gia_AigerWriteUnsignedBuffer( pBuffer, Pos, uLit1 - uLit0 );
+        Pos += Gia_AigerWriteUnsignedBuffer( pBuffer + Pos, 0, uLit  - uLit1 );
+        Pos += Gia_AigerWriteUnsignedBuffer( pBuffer + Pos, 0, uLit1 - uLit0 );
         if ( Pos > nBufferSize - 10 )
         {
             printf( "Gia_AigerWrite(): AIGER generation has failed because the allocated buffer is too small.\n" );
-            fclose( pFile );
-            if ( p != pInit )
-                Gia_ManStop( p );
-            return;
+            ABC_FREE( pBuffer );
+            goto finish;
         }
     }
     assert( Pos < nBufferSize );
@@ -1659,7 +1835,6 @@ void Gia_AigerWriteS( Gia_Man_t * pInit, char * pFileName, int fWriteSymbols, in
     // write cell mapping
     if ( Gia_ManHasCellMapping(p) )
     {
-        extern Vec_Str_t * Gia_AigerWriteCellMappingDoc( Gia_Man_t * p );
         fprintf( pFile, "M" );
         vStrExt = Gia_AigerWriteCellMappingDoc( p );
         Gia_FileWriteBufferSize( pFile, Vec_StrSize(vStrExt) );
@@ -1857,12 +2032,26 @@ void Gia_AigerWriteS( Gia_Man_t * pInit, char * pFileName, int fWriteSymbols, in
         fprintf( pFile, "\nThis file was produced by the GIA package in ABC on %s\n", Gia_TimeStamp() );
         fprintf( pFile, "For information about AIGER format, refer to %s\n", "http://fmv.jku.at/aiger" );
     }
-    fclose( pFile );
+    fSuccess = !ferror( pFile );
+finish:
+    if ( fclose(pFile) != 0 )
+        fSuccess = 0;
     if ( p != pInit )
     {
         Gia_ManTransferTiming( pInit, p );
         Gia_ManStop( p );
     }
+    return fSuccess;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Writes binary AIGER using the existing void-returning interface.]
+
+***********************************************************************/
+void Gia_AigerWriteS( Gia_Man_t * p, char * pFileName, int fWriteSymbols, int fCompact, int fWriteNewLine, int fSkipComment )
+{
+    Gia_AigerWriteChecked( p, pFileName, fWriteSymbols, fCompact, fWriteNewLine, fSkipComment );
 }
 
 /**Function*************************************************************

@@ -96,7 +96,7 @@ Cnf_Cut_t * Cnf_CutCreate( Cnf_Man_t * p, Aig_Obj_t * pObj )
     pCut = Cnf_CutAlloc( p, pCutBest->nLeaves );
     memcpy( pCut->pFanins, pCutBest->pLeaves, sizeof(int) * pCutBest->nLeaves );
     pTruth = Cnf_CutTruth(pCut);
-    *pTruth = (pCutBest->uTruth << 16) | pCutBest->uTruth;
+    *pTruth = ((unsigned)pCutBest->uTruth << 16) | pCutBest->uTruth;
     pCut->Cost = Cnf_CutSopCost( p, pCutBest );
     return pCut;
 }
@@ -294,7 +294,7 @@ void Cnf_CutInsertIthVar( Cnf_Cut_t * pCut, int iVar, int iFan )
 Cnf_Cut_t * Cnf_CutCompose( Cnf_Man_t * p, Cnf_Cut_t * pCut, Cnf_Cut_t * pCutFan, int iFan )
 {
     Cnf_Cut_t * pCutRes;
-    static int pFanins[32];
+    static ABC_THREAD_LOCAL int pFanins[32];
     unsigned * pTruth, * pTruthFan, * pTruthRes;
     unsigned * pTop = p->pTruths[0], * pFan = p->pTruths[2], * pTemp = p->pTruths[3];
     unsigned uPhase, uPhaseFan;
@@ -373,4 +373,3 @@ Cnf_Cut_t * Cnf_CutCompose( Cnf_Man_t * p, Cnf_Cut_t * pCut, Cnf_Cut_t * pCutFan
 
 
 ABC_NAMESPACE_IMPL_END
-

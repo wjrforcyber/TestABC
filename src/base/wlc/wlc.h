@@ -214,7 +214,9 @@ struct Wlc_BstPar_t_
     int                    fGiaSimple;
     int                    fAddOutputs;
     int                    fMulti;
-    int                    fBooth;
+    int                    fBooth;        // Booth multipliers with arrival-driven reduction
+    int                    fBoothOld;     // Booth multipliers with the previous fixed-order reduction
+    int                    fWallace;      // Wallace-tree multipliers with arrival-driven reduction
     int                    fNonRest;
     int                    fCla;
     int                    fDivBy0;
@@ -239,6 +241,8 @@ static inline void Wlc_BstParDefault( Wlc_BstPar_t * pPar )
     pPar->fAddOutputs  =  0;
     pPar->fMulti       =  0;
     pPar->fBooth       =  0;
+    pPar->fBoothOld    =  0;
+    pPar->fWallace     =  0;
     pPar->fCla         =  0;
     pPar->fDivBy0      =  0;
     pPar->fCreateMiter =  0;
@@ -385,12 +389,34 @@ static inline Wlc_Obj_t *  Wlc_ObjCo2PoFo( Wlc_Ntk_t * p, int iCoId )           
 ////////////////////////////////////////////////////////////////////////
 
 /*=== wlcAbs.c ========================================================*/
+extern Wla_Man_t *    Wla_ManStart( Wlc_Ntk_t * pNtk, Wlc_Par_t * pPars );
+extern void           Wla_ManStop( Wla_Man_t * p );
+extern int            Wla_ManSolve( Wla_Man_t * pWla, Wlc_Par_t * pPars );
 extern int            Wlc_NtkAbsCore( Wlc_Ntk_t * p, Wlc_Par_t * pPars );
 extern int            Wlc_NtkPdrAbs( Wlc_Ntk_t * p, Wlc_Par_t * pPars );
 /*=== wlcAbs2.c ========================================================*/
 extern int            Wlc_NtkAbsCore2( Wlc_Ntk_t * p, Wlc_Par_t * pPars );
 /*=== wlcBlast.c ========================================================*/
+// timing memo of the arrival-driven multiplier, shared by all multipliers of one bit-blasting run
+typedef struct Wlc_BlastTim_t_ Wlc_BlastTim_t;
+struct Wlc_BlastTim_t_
+{
+    int                    iBase;         // objects with ID >= iBase were created by the current multiplier
+    Vec_Int_t *            vLev;          // their memoized AIG levels, indexed by ID - iBase (-1 = unknown)
+    Vec_Int_t *            vOld;          // hash of (ID, level) for the older objects visited
+    int                    nOld;          // the number of entries in vOld
+};
 extern Gia_Man_t *    Wlc_NtkBitBlast( Wlc_Ntk_t * p, Wlc_BstPar_t * pPars );
+extern void           Wlc_BlastMultiplier( Gia_Man_t * pNew, int * pArgA, int * pArgB, int nArgA, int nArgB, Vec_Int_t * vTemp, Vec_Int_t * vRes, int fSigned );
+extern void           Wlc_BlastBooth( Gia_Man_t * pNew, int * pArgA, int * pArgB, int nArgA, int nArgB, Vec_Int_t * vRes, int fSigned, int fFastAdder, Vec_Wec_t ** pvProds, int fVerbose );
+extern Wlc_BlastTim_t * Wlc_BlastTimStart( void );
+extern void           Wlc_BlastTimStop( Wlc_BlastTim_t * p );
+extern void           Wlc_BlastTimNewGen( Wlc_BlastTim_t * p, Gia_Man_t * pGia );
+extern void           Wlc_BlastTimSetInputs( Wlc_BlastTim_t * p, int * pLits, int nLits );
+extern int            Wlc_BlastYjLevel( Gia_Man_t * p, Wlc_BlastTim_t * pTim, int iLit );
+extern void           Wlc_BlastAdderProfile( Gia_Man_t * pNew, Wlc_BlastTim_t * pTim, int * pAdd0, int * pAdd1, int nBits, int Slack, int fCondSum );
+extern void           Wlc_BlastBoothYJ( Gia_Man_t * pNew, Wlc_BlastTim_t * pTim, int * pArgA, int * pArgB, int nArgA, int nArgB, Vec_Int_t * vRes, int fSigned, int fFastAdder, int fVerbose );
+extern void           Wlc_BlastWallace( Gia_Man_t * pNew, Wlc_BlastTim_t * pTim, int * pArgA, int * pArgB, int nArgA, int nArgB, Vec_Int_t * vRes, int fSigned, int fFastAdder, int fVerbose );
 /*=== wlcCom.c ========================================================*/
 extern void           Wlc_SetNtk( Abc_Frame_t * pAbc, Wlc_Ntk_t * pNtk );
 /*=== wlcMem.c ========================================================*/
@@ -429,6 +455,7 @@ extern void           Wlc_NtkPrintObjects( Wlc_Ntk_t * p );
 extern void           Wlc_NtkTransferNames( Wlc_Ntk_t * pNew, Wlc_Ntk_t * p );
 extern char *         Wlc_NtkNewName( Wlc_Ntk_t * p, int iCoId, int fSeq );
 extern Wlc_Ntk_t *    Wlc_NtkDupDfs( Wlc_Ntk_t * p, int fMarked, int fSeq );
+extern void           Wlc_NtkDupDfs_rec( Wlc_Ntk_t * pNew, Wlc_Ntk_t * p, int iObj, Vec_Int_t * vFanins );
 extern Wlc_Ntk_t *    Wlc_NtkDupDfsAbs( Wlc_Ntk_t * p, Vec_Int_t * vPisOld, Vec_Int_t * vPisNew, Vec_Int_t * vFlops );
 extern Wlc_Ntk_t *    Wlc_NtkDupDfsSimple( Wlc_Ntk_t * p );
 extern void           Wlc_NtkCleanMarks( Wlc_Ntk_t * p );

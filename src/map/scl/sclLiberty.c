@@ -720,7 +720,8 @@ int Scl_LibertyReadCellIsDontUse( Scl_Tree_t * p, Scl_Item_t * pCell, SC_DontUse
     Scl_Item_t * pAttr;
     Scl_ItemForEachChild( p, pCell, pAttr )
     {
-        if ( !Scl_LibertyCompare(p, pAttr->Key, "dont_use") )
+        if ( !Scl_LibertyCompare(p, pAttr->Key, "dont_use") &&
+             !strcmp(Scl_LibertyReadString(p, pAttr->Head), "true") )
             return 1;
         const char * cell_name = Scl_LibertyReadString(p, pCell->Head);
         for (int i = 0; i < dont_use.size; i++) {
@@ -759,7 +760,59 @@ char * Scl_LibertyReadPinFormula( Scl_Tree_t * p, Scl_Item_t * pPin )
 {
     Scl_Item_t * pFunc;
     Scl_ItemForEachChildName( p, pPin, pFunc, "function" )
-        return Scl_LibertyReadString(p, pFunc->Head);
+    {
+        char * pFormula = Scl_LibertyReadString(p, pFunc->Head), * pCopy, * pCur;
+        int fOperand = 0;
+        if ( !strchr(pFormula, '^') )
+            return pFormula;
+        // Liberty gives XOR precedence over AND.  Parenthesize XOR groups so
+        // the formula keeps its meaning in GENLIB and in the serialized SCL.
+        pCopy = Abc_UtilStrsav( pFormula );
+        Vec_StrClear( p->vBuffer );
+        Vec_StrPush( p->vBuffer, '(' );
+        for ( pCur = pCopy; *pCur; )
+        {
+            char c = *pCur++;
+            if ( strchr(" \t\r\n", c) )
+                continue;
+            if ( strchr("*&+|", c) )
+            {
+                Vec_StrPush( p->vBuffer, ')' );
+                Vec_StrPush( p->vBuffer, c );
+                Vec_StrPush( p->vBuffer, '(' );
+                fOperand = 0;
+            }
+            else if ( c == '^' )
+            {
+                Vec_StrPush( p->vBuffer, c );
+                fOperand = 0;
+            }
+            else if ( c == ')' )
+            {
+                Vec_StrPrintStr( p->vBuffer, "))" );
+                fOperand = 1;
+            }
+            else if ( c == '\'' )
+                Vec_StrPush( p->vBuffer, c );
+            else
+            {
+                if ( fOperand ) // implicit AND between adjacent operands
+                    Vec_StrPrintStr( p->vBuffer, ")*(" );
+                if ( c == '(' )
+                    Vec_StrPrintStr( p->vBuffer, "((" );
+                else
+                    Vec_StrPush( p->vBuffer, c );
+                fOperand = (c != '(' && c != '!');
+                if ( fOperand )
+                    while ( *pCur && !strchr(" \t\r\n()!'^*&+|", *pCur) )
+                        Vec_StrPush( p->vBuffer, *pCur++ );
+            }
+        }
+        Vec_StrPrintStr( p->vBuffer, ")" );
+        Vec_StrPush( p->vBuffer, '\0' );
+        ABC_FREE( pCopy );
+        return Vec_StrArray( p->vBuffer );
+    }
     return NULL;
 }
 int Scl_LibertyReadCellIsThreeState( Scl_Tree_t * p, Scl_Item_t * pCell )
@@ -838,7 +891,7 @@ Vec_Str_t * Scl_LibertyReadGenlibStr( Scl_Tree_t * p, int fVerbose, SC_DontUse d
             Vec_StrPrintStr( vStr, " " );
             Vec_StrPrintStr( vStr, Scl_LibertyReadString(p, pOutput->Head) );
             Vec_StrPrintStr( vStr, "=" );
-            Vec_StrPrintStr( vStr, pFormula );
+            Vec_StrPrintStr( vStr, Scl_LibertyReadPinFormula(p, pOutput) );
             Vec_StrPrintStr( vStr, ";\n" );
             // iterate through input pins
             Scl_ItemForEachChildName( p, pCell, pInput, "pin" )
@@ -955,8 +1008,9 @@ void Scl_LibertyReadLoadUnit( Scl_Tree_t * p, Vec_Str_t * vOut )
     {
         // expecting (1.00,ff) or (1, pf) ... 12 or 15 for 'pf' or 'ff'
         char * pHead   = Scl_LibertyReadString(p, pItem->Head);
-        float First    = atof(strtok(pHead, " \t\n\r\\\","));
-        char * pSecond = strtok(NULL, " \t\n\r\\\",");
+        char * pSave   = NULL;
+        float First    = atof(Abc_UtilStrtok(pHead, " \t\n\r\\\",", &pSave));
+        char * pSecond = Abc_UtilStrtok(NULL, " \t\n\r\\\",", &pSave);
         if ( pSecond && (!strcmp(pSecond, "pf") || !strcmp(pSecond, "pF")) )
         {
             Vec_StrPutF_( vOut, First );
@@ -992,8 +1046,9 @@ void Scl_LibertyReadWireLoad( Scl_Tree_t * p, Vec_Str_t * vOut )
         Scl_ItemForEachChildName( p, pItem, pChild, "fanout_length" )
         {
             char * pHead  = Scl_LibertyReadString(p, pChild->Head);
-            int    First  = atoi( strtok(pHead, " ,") );
-            float  Second = atof( strtok(NULL, " ") );
+            char * pSave  = NULL;
+            int    First  = atoi( Abc_UtilStrtok(pHead, " ,", &pSave) );
+            float  Second = atof( Abc_UtilStrtok(NULL, " ", &pSave) );
             Vec_StrPutI_( vOut, First );
             Vec_StrPutF_( vOut, Second );
             Vec_StrPut_( vOut );
@@ -1016,9 +1071,10 @@ void Scl_LibertyReadWireLoadSelect( Scl_Tree_t * p, Vec_Str_t * vOut )
         Scl_ItemForEachChildName( p, pItem, pChild, "wire_load_from_area" )
         {
             char * pHead  = Scl_LibertyReadString(p, pChild->Head);
-            float  First  = atof( strtok(pHead, " ,") );
-            float  Second = atof( strtok(NULL, " ,") );
-            char * pThird = strtok(NULL, " ");
+            char * pSave  = NULL;
+            float  First  = atof( Abc_UtilStrtok(pHead, " ,", &pSave) );
+            float  Second = atof( Abc_UtilStrtok(NULL, " ,", &pSave) );
+            char * pThird = Abc_UtilStrtok(NULL, " ", &pSave);
             if ( pThird[0] == '\"' )
                 assert(pThird[strlen(pThird)-1] == '\"'), pThird[strlen(pThird)-1] = 0, pThird++;
             Vec_StrPutF_( vOut, First );
@@ -1060,12 +1116,20 @@ float Scl_LibertyReadPinCap( Scl_Tree_t * p, Scl_Item_t * pPin, char * pName )
         return atof(Scl_LibertyReadString(p, pItem->Head));
     return 0;
 }
+static inline int Scl_LibertyHasPin( char * pPinList, const char * pNameIn )
+{
+    char * pTok, * pSave = NULL;
+    for ( ; (pTok = Abc_UtilStrtok(pPinList, " \t\n\r", &pSave)); pPinList = NULL )
+        if ( !strcmp(pTok, pNameIn) )
+            return 1;
+    return 0;
+}
 Scl_Item_t * Scl_LibertyReadPinTiming( Scl_Tree_t * p, Scl_Item_t * pPinOut, char * pNameIn )
 {
     Scl_Item_t * pTiming, * pPinIn;
     Scl_ItemForEachChildName( p, pPinOut, pTiming, "timing" )
         Scl_ItemForEachChildName( p, pTiming, pPinIn, "related_pin" )
-            if ( !strcmp(Scl_LibertyReadString(p, pPinIn->Head), pNameIn) )
+            if ( Scl_LibertyHasPin(Scl_LibertyReadString(p, pPinIn->Head), pNameIn) )
                 return pTiming;
     return NULL;
 }
@@ -1076,7 +1140,7 @@ Vec_Ptr_t * Scl_LibertyReadPinTimingAll( Scl_Tree_t * p, Scl_Item_t * pPinOut, c
     vTimings = Vec_PtrAlloc( 16 );
     Scl_ItemForEachChildName( p, pPinOut, pTiming, "timing" )
         Scl_ItemForEachChildName( p, pTiming, pPinIn, "related_pin" )
-            if ( !strcmp(Scl_LibertyReadString(p, pPinIn->Head), pNameIn) )
+            if ( Scl_LibertyHasPin(Scl_LibertyReadString(p, pPinIn->Head), pNameIn) )
                 Vec_PtrPush( vTimings, pTiming );
     return vTimings;
 }
@@ -1098,9 +1162,9 @@ int Scl_LibertyReadTimingSense( Scl_Tree_t * p, Scl_Item_t * pPin )
 }
 Vec_Flt_t * Scl_LibertyReadFloatVec( char * pName )
 {
-    char * pToken;
+    char * pToken, * pSave = NULL;
     Vec_Flt_t * vValues = Vec_FltAlloc( 100 );
-    for ( pToken = strtok(pName, " \t\n\r\\\","); pToken; pToken = strtok(NULL, " \t\n\r\\\",") )
+    for ( pToken = Abc_UtilStrtok(pName, " \t\n\r\\\",", &pSave); pToken; pToken = Abc_UtilStrtok(NULL, " \t\n\r\\\",", &pSave) )
         Vec_FltPush( vValues, atof(pToken) );
     return vValues;
 }
@@ -1337,7 +1401,7 @@ Vec_Ptr_t * Scl_LibertyReadPinPowerAll( Scl_Tree_t * p, Scl_Item_t * pPinOut, ch
     Scl_Item_t * pPower, * pPinIn;
     Scl_ItemForEachChildName( p, pPinOut, pPower, "internal_power" )
     Scl_ItemForEachChildName( p, pPower, pPinIn, "related_pin" )
-        if ( !strcmp(Scl_LibertyReadString(p, pPinIn->Head), pNameIn) )
+        if ( Scl_LibertyHasPin(Scl_LibertyReadString(p, pPinIn->Head), pNameIn) )
             Vec_PtrPush( vPowers, pPower );
     return vPowers;
 }

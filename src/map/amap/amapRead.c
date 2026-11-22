@@ -188,17 +188,19 @@ void Amap_RemoveComments( char * pBuffer, int * pnDots, int * pnLines )
 Vec_Ptr_t * Amap_DeriveTokens( char * pBuffer )
 {
     Vec_Ptr_t * vTokens;
-    char * pToken;
+    char * pToken, * pSave = NULL;
     vTokens = Vec_PtrAlloc( 1000 );
-    pToken = strtok( pBuffer, " =\t\r\n" );
+    pToken = Abc_UtilStrtok( pBuffer, " =\t\r\n", &pSave );
     while ( pToken )
     {
-        Vec_PtrPush( vTokens, pToken );
-        pToken = strtok( NULL, " =\t\r\n" );
         // skip latches
-        if ( pToken && strcmp( pToken, "LATCH" ) == 0 )
-            while ( pToken && strcmp( pToken, "GATE" ) != 0 )
-                pToken = strtok( NULL, " =\t\r\n" );
+        if ( strcmp( pToken, "LATCH" ) == 0 )
+            while ( pToken && strcmp(pToken, "GATE") && strcmp(pToken, ".end") )
+                pToken = Abc_UtilStrtok( NULL, " =\t\r\n", &pSave );
+        if ( pToken == NULL )
+            break;
+        Vec_PtrPush( vTokens, pToken );
+        pToken = Abc_UtilStrtok( NULL, " =\t\r\n", &pSave );
     }
     return vTokens;
 }
@@ -240,7 +242,7 @@ int Amap_ParseCountPins( Vec_Ptr_t * vTokens, int iPos )
 int Amap_GateCollectNames( Aig_MmFlex_t * pMem, char * pForm, char * pPinNames[] )
 {
     char Buffer[1000];
-    char * pTemp;
+    char * pTemp, * pSave = NULL;
     int nPins, i;
     // save the formula as it was
     strcpy( Buffer, pForm );
@@ -252,7 +254,7 @@ int Amap_GateCollectNames( Aig_MmFlex_t * pMem, char * pForm, char * pPinNames[]
             *pTemp = ' ';
     // save the names
     nPins = 0;
-    pTemp = strtok( Buffer, " " );
+    pTemp = Abc_UtilStrtok( Buffer, " ", &pSave );
     while ( pTemp )
     {
         for ( i = 0; i < nPins; i++ )
@@ -263,7 +265,7 @@ int Amap_GateCollectNames( Aig_MmFlex_t * pMem, char * pForm, char * pPinNames[]
             pPinNames[nPins++] = Amap_ParseStrsav( pMem, pTemp );
         }
         // get the next name
-        pTemp = strtok( NULL, " " );
+        pTemp = Abc_UtilStrtok( NULL, " ", &pSave );
     }
     return nPins;
 }
@@ -459,6 +461,9 @@ Amap_Lib_t * Amap_LibReadBuffer( char * pBuffer, int fVerbose )
 {
     Amap_Lib_t * pLib;
     Vec_Ptr_t * vTokens;
+    // skip the UTF-8 byte order mark, if present
+    if ( !strncmp(pBuffer, "\xEF\xBB\xBF", 3) )
+        pBuffer += 3;
     Amap_RemoveComments( pBuffer, NULL, NULL );
     vTokens = Amap_DeriveTokens( pBuffer );
     pLib = Amap_ParseTokens( vTokens, fVerbose );

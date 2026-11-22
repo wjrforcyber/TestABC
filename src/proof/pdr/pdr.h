@@ -53,6 +53,7 @@ struct Pdr_Par_t_
     int fTwoRounds;       // use two rounds for generalization
     int fMonoCnf;         // monolythic CNF
     int fNewXSim;         // updated X-valued simulation
+    int fTsimStop;        // poll cancellation during classic ternary simulation
     int fFlopPrio;        // use structural flop priorities
     int fFlopOrder;       // order flops for 'analyze_final' during generalization
     int fDumpInv;         // dump inductive invariant
@@ -66,6 +67,7 @@ struct Pdr_Par_t_
     int fCtgs;            // handle CTGs in down
     int fUseAbs;          // use abstraction 
     int fUseSimpleRef;    // simplified CEX refinement
+    int fUseGipSat;       // use GipSAT (IC3-specialized CDCL solver ported from rIC3)
     int fVerbose;         // verbose output`
     int fVeryVerbose;     // very verbose output
     int fNotVerbose;      // not printing line by line progress

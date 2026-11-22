@@ -89,14 +89,13 @@ void Hop_ManStopMemory( Hop_Man_t * p )
 void Hop_ManAddMemory( Hop_Man_t * p )
 {
     char * pMemory = 0;
-    Hop_Obj_t * pEntry, * pNext;
+    Hop_Obj_t * pEntry;
     int i, nBytes;
     assert( sizeof(Hop_Obj_t) <= 64 );
     assert( p->pListFree == NULL );
 //    assert( (Hop_ManObjNum(p) & IVY_PAGE_MASK) == 0 );
     // allocate new memory page
     nBytes = sizeof(Hop_Obj_t) * (1<<IVY_PAGE_SIZE) + 64;
-    pMemory = pMemory + 64 - (((int)(ABC_PTRUINT_T)pMemory) & 63);
     pMemory = ABC_ALLOC( char, nBytes );
     Vec_PtrPush( p->vChunks, pMemory );
     // align memory at the 32-byte boundary
@@ -108,12 +107,10 @@ void Hop_ManAddMemory( Hop_Man_t * p )
     p->pListFree = pEntry;
     for ( i = 1; i <= IVY_PAGE_MASK; i++ )
     {
-        pNext = pEntry + 1;
-        memcpy( pEntry, &pNext, sizeof(Hop_Obj_t *) );
+        pEntry->pData = pEntry + 1;
         pEntry++;
     }
-    pNext = NULL;
-    memcpy( pEntry, &pNext, sizeof(Hop_Obj_t *) );
+    pEntry->pData = NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////

@@ -59,6 +59,7 @@ struct Sbl_Man_t_
     // parameters
     int            LutSize;      // LUT size
     int            nBTLimit;     // conflicts
+    abctime        Deadline;     // absolute wall time in nanoseconds, or zero
     int            DelayMax;     // external delay
     int            nEdges;       // the number of edges
     int            fDelay;       // delay mode
@@ -744,6 +745,7 @@ int Sbl_ManComputeCuts( Sbl_Man_t * p )
     abctime clk = Abc_Clock();
     Gia_Obj_t * pObj; Vec_Int_t * vFanins;
     int i, k, Index, Fanin, nObjs = Vec_IntSize(p->vLeaves) + Vec_IntSize(p->vAnds);
+    (void)nObjs;
     assert( Vec_IntSize(p->vLeaves) <= 128 && Vec_IntSize(p->vAnds) <= p->nVars );
     // assign leaf cuts
     Vec_IntClear( p->vCutsStart );
@@ -791,6 +793,7 @@ int Sbl_ManComputeCuts( Sbl_Man_t * p )
     Gia_ManForEachObjVec( p->vRoots, p->pGia, pObj, i )
     {
         int Obj = Gia_ObjId(p->pGia, pObj);
+        (void)Obj;
         if ( Gia_ObjIsCi(pObj) )
             continue;
         assert( Gia_ObjIsLut2(p->pGia, Obj) );
@@ -1046,6 +1049,12 @@ int Sbl_ManTestSat( Sbl_Man_t * p, int iPivot )
         Vec_IntWriteEntry( p->vAssump, 0, Abc_Var2Lit(Vec_IntEntry(p->vCardVars, StartSol-fKeepTrying), 1) );
         // solve the problem
         clk2 = Abc_Clock();
+        if ( p->Deadline )
+        {
+            abctime left = p->Deadline - Abc_ClockHr();
+            if ( left <= 0 ) break;
+            sat_solver_set_runtime_limit( p->pSat, Abc_Clock() + (abctime)(left * (CLOCKS_PER_SEC/1e9)) );
+        }
         nConfBef = (int)p->pSat->stats.conflicts;
         status = sat_solver_solve( p->pSat, Vec_IntArray(p->vAssump), Vec_IntLimit(p->vAssump), p->nBTLimit, 0, 0, 0 );
         p->timeSat += Abc_Clock() - clk2;
@@ -1189,11 +1198,17 @@ void Sbl_ManPrintRuntime( Sbl_Man_t * p )
     ABC_PRTP( "Other ", p->timeOther,   p->timeTotal );
     ABC_PRTP( "ALL   ", p->timeTotal,   p->timeTotal );
 }
-void Gia_ManLutSat( Gia_Man_t * pGia, int LutSize, int nNumber, int nImproves, int nBTLimit, int DelayMax, int nEdges, int fDelay, int fReverse, int fVerbose, int fVeryVerbose )
+/**Function*************************************************************
+
+  Synopsis    [Remaps local LUT windows until the improvement limit or an absolute wall deadline.]
+
+***********************************************************************/
+void Gia_ManLutSatTimed( Gia_Man_t * pGia, int LutSize, int nNumber, int nImproves, int nBTLimit, int DelayMax, int nEdges, int fDelay, int fReverse, int fVerbose, int fVeryVerbose, abctime Deadline )
 {
     int iLut, nImproveCount = 0;
     Sbl_Man_t * p   = Sbl_ManAlloc( pGia, nNumber );
     p->LutSize      = LutSize;      // LUT size
+    p->Deadline     = Deadline;
     p->nBTLimit     = nBTLimit;     // conflicts
     p->DelayMax     = DelayMax;     // external delay
     p->nEdges       = nEdges;       // the number of edges
@@ -1210,6 +1225,7 @@ void Gia_ManLutSat( Gia_Man_t * pGia, int LutSize, int nNumber, int nImproves, i
     Gia_ManComputeOneWinStart( pGia, nNumber, fReverse );
     Gia_ManForEachLut2( pGia, iLut )
     {
+        if ( Deadline && Abc_ClockHr() >= Deadline ) break;
         if ( Sbl_ManTestSat( p, iLut ) != 2 )
             continue;
         if ( ++nImproveCount == nImproves )
@@ -1223,6 +1239,16 @@ void Gia_ManLutSat( Gia_Man_t * pGia, int LutSize, int nNumber, int nImproves, i
     Sbl_ManPrintRuntime( p );
     Sbl_ManStop( p );
     Vec_IntFreeP( &pGia->vPacking );
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Remaps LUT windows without a wall-clock limit.]
+
+***********************************************************************/
+void Gia_ManLutSat( Gia_Man_t * pGia, int LutSize, int nNumber, int nImproves, int nBTLimit, int DelayMax, int nEdges, int fDelay, int fReverse, int fVerbose, int fVeryVerbose )
+{
+    Gia_ManLutSatTimed( pGia, LutSize, nNumber, nImproves, nBTLimit, DelayMax, nEdges, fDelay, fReverse, fVerbose, fVeryVerbose, 0 );
 }
 
 /**Function*************************************************************
@@ -1515,7 +1541,7 @@ Vec_Int_t * Gia_ManDeriveSimpleMapping( Gia_Man_t * p, Vec_Int_t * vRes )
 void Gia_ManSimplePrintMapping( Vec_Int_t * vRes, int nIns )
 {    
     int i, k, nObjs = Vec_IntSize(vRes)/7, nSteps = Abc_Base10Log(nObjs);
-    int nCard = Vec_IntSum(vRes) - nIns; char NumStr[10];
+    int nCard = Vec_IntSum(vRes) - nIns; char NumStr[12];
     printf( "Solution with cardinality %d:\n", nCard );
     for ( k = 0; k < nSteps; k++ ) {        
         printf( "  " );
@@ -2089,4 +2115,3 @@ Gia_Man_t * Gia_ManKSatMapping( word Truth, int nIns, int nNodes, int nBound, in
 
 
 ABC_NAMESPACE_IMPL_END
-

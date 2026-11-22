@@ -89,6 +89,7 @@ struct Abc_Frame_t_
     FILE *          Out;
     FILE *          Err;
     FILE *          Hst;
+    FILE *          pLog;         // private combined log; closed with the frame
     // used for runtime measurement
     double          TimeCommand;   // the runtime of the last command
     double          TimeTotal;     // the total runtime of all commands
@@ -98,6 +99,13 @@ struct Abc_Frame_t_
     void *          pManDec;       // decomposition manager
     void *          pManDsd;       // decomposition manager
     void *          pManDsd2;      // decomposition manager
+    void *          pManDar;       // DAG-aware rewriting library
+    void *          pManCnf;       // AIG-to-CNF manager
+    void *          pManAigR;      // AIG recording manager
+    void *          pManNpn;       // NPN recording manager
+    void *          pManSdm;       // DSD manager
+    void *          pManLms;       // LMS recording manager
+    void *          pManBest;      // best-network parameters
     // libraries for mapping
     void *          pLibLut[ABC_LUT_LIBS]; // the current LUT library
     void *          pLibCell;      // the current cell library
@@ -113,9 +121,11 @@ struct Abc_Frame_t_
     // inductive don't-cares
     Vec_Int_t *     vIndFlops;
     int             nIndFrames;
+    int             nGiasLutSize;   // 0 for ANDs, positive for LUT width, -1 for cell delay
 
     // new code
     Gia_Man_t *     pGia;          // alternative current network as a light-weight AIG
+    Vec_Ptr_t *     pGias;         // indexed by logic level, or packed in increasing cell delay
     Gia_Man_t *     pGia2;         // copy of the above
     Gia_Man_t *     pGiaBest;      // copy of the above
     Gia_Man_t *     pGiaBest2;     // copy of the above
@@ -149,8 +159,7 @@ struct Abc_Frame_t_
     void *          pAbcWlc;
     Vec_Int_t *     pAbcWlcInv;
     void *          pAbcRtl;
-    void *          pAbcBac;
-    void *          pAbcCba;
+    void *          pAbcSn;
     void *          pAbcPla;
     Abc_Nam_t *     pJsonStrs;
     Vec_Wec_t *     vJsonObjs;
@@ -168,8 +177,11 @@ struct Abc_Frame_t_
     int *           pBoxes;
     void *          pNdr;
     int *           pNdrArray;
+    void **         pLibHandles;   // dynamically loaded extension libraries
 
     Abc_Frame_Callback_BmcFrameDone_Func pFuncOnFrameDone;
+    Abc_Nf2Cache_t  Nf2Cache;      // compiled cell libraries owned by this frame
+    word            GiasLibSignature; // library identity for saved standard-cell witnesses
 };
 
 typedef void (*Abc_Frame_Initialization_Func)( Abc_Frame_t * pAbc );
@@ -204,6 +216,7 @@ extern ABC_DLL int             main( int argc, char * argv[] );
 /*=== mvInit.c ===================================================*/
 extern ABC_DLL void            Abc_FrameInit( Abc_Frame_t * pAbc );
 extern ABC_DLL void            Abc_FrameEnd( Abc_Frame_t * pAbc );
+/* Registration must complete before any frames or worker threads are created. */
 extern ABC_DLL void            Abc_FrameAddInitializer( Abc_FrameInitializer_t* p );
 /*=== mvFrame.c =====================================================*/
 extern ABC_DLL Abc_Frame_t *   Abc_FrameAllocate();

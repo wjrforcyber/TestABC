@@ -17,19 +17,11 @@ int Options::reportdefault;
 
 /*------------------------------------------------------------------------*/
 
-// The order of initializations of static objects is undefined and thus we
-// can not assume that this table is already initialized if a solver and
-// thus the constructor of 'Options' is called.  Therefore we just have to
-// reinitialize this table in every call to 'Options::Options'.  This does
-// not produce a data race even for parallel initialization since the
-// same values are written by all threads under the assumption that the
-// 'reportdefault' is set before any solver is initialized.  We do have to
-// perform this static initialization though, since 'has' is static and does
-// not require that the 'Options' constructor was called.
-
-Option Options::table[] = {
+// Only constant metadata is shared. Each solver initializes its own option
+// values below, including the library or executable default for reporting.
+const Option Options::table[] = {
 #define OPTION(N, V, L, H, O, P, R, D) \
-  {#N, (int) V, (int) L, (int) H, (int) O, (bool) P, D},
+  {#N, (int) L, (int) H, (int) O, (bool) P, D},
     OPTIONS
 #undef OPTION
 };
@@ -39,11 +31,11 @@ Option Options::table[] = {
 // Binary search in 'table', which requires option names to be sorted, which
 // in turned is checked at start-up in 'Options::Options'.
 
-Option *Options::has (const char *name) {
+const Option *Options::has (const char *name) {
   size_t l = 0, r = number_of_options;
   while (l < r) {
     size_t m = l + (r - l) / 2;
-    Option *res = &table[m];
+    const Option *res = &table[m];
     int tmp = strcmp (name, res->name);
     if (!tmp)
       return res;
@@ -106,12 +98,15 @@ void Options::initialize_from_environment (int &val, const char *name,
 // Initialize all the options to their default value 'V'.
 
 Options::Options (Internal *s) : internal (s) {
-  CADICAL_assert (number_of_options == sizeof Options::table / sizeof (Option));
+  static_assert (sizeof table / sizeof *table == number_of_options,
+                 "invalid CaDiCaL option table size");
 
   // First initialize them according to defaults in 'options.hpp'.
   //
   const char *prev = "";
+#if !defined(CADICAL_NDEBUG) && !defined(NDEBUG)
   size_t i = 0;
+#endif
 #define OPTION(N, V, L, H, O, P, R, D) \
   do { \
     if ((L) > (V)) \
@@ -123,16 +118,9 @@ Options::Options (Internal *s) : internal (s) {
     if (strcmp (prev, #N) > 0) \
       FATAL ("'%s' ordered before '" #N "' in 'options.hpp'", prev); \
     N = (int) (V); \
-    CADICAL_assert (&val (i) == &N); \
-    /* The order of initializing static data is undefined and thus */ \
-    /* it might be the case that the 'table' is not initialized yet. */ \
-    /* Thus this construction just reinitializes the table too even */ \
-    /* though it might not be necessary. */ \
-    CADICAL_assert (!table[i].name || !strcmp (table[i].name, #N)); \
-    table[i] = {#N,        (int) (V),  (int) (L), (int) (H), \
-                (int) (O), (bool) (P), D}; \
+    CADICAL_assert (!strcmp (table[i].name, #N)); \
+    CADICAL_assert (&val (i++) == &N); \
     prev = #N; \
-    i++; \
   } while (0);
   OPTIONS
 #undef OPTION
@@ -156,7 +144,7 @@ Options::Options (Internal *s) : internal (s) {
 
 /*------------------------------------------------------------------------*/
 
-void Options::set (Option *o, int new_val) {
+void Options::set (const Option *o, int new_val) {
   CADICAL_assert (o);
   int &val = o->val (this), old_val = val;
   if (old_val == new_val) {
@@ -181,7 +169,7 @@ void Options::set (Option *o, int new_val) {
 // Explicit option value setting.
 
 bool Options::set (const char *name, int val) {
-  Option *o = has (name);
+  const Option *o = has (name);
   if (!o)
     return false;
   set (o, val);
@@ -189,7 +177,7 @@ bool Options::set (const char *name, int val) {
 }
 
 int Options::get (const char *name) {
-  Option *o = has (name);
+  const Option *o = has (name);
   return o ? o->val (this) : 0;
 }
 
@@ -317,7 +305,7 @@ void Options::disable_preprocessing () {
 }
 
 bool Options::is_preprocessing_option (const char *name) {
-  Option *o = has (name);
+  const Option *o = has (name);
   return o ? o->preprocessing : false;
 }
 

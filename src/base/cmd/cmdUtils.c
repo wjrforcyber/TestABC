@@ -660,6 +660,7 @@ void CmdCommandPrint( Abc_Frame_t * pAbc, int fPrintAll, int fDetails )
                     fprintf( pAbc->Out, "\n" );
                     // fprintf( pAbc->Out, "--- %s ---\n", ppCommands[j]->sName );
                     tmp_cmd = ABC_ALLOC(char, strlen(ppCommands[j]->sName)+4);
+                    if ( !tmp_cmd ) abort();
                     (void) sprintf(tmp_cmd, "%s -h", ppCommands[j]->sName);
                     (void) Cmd_CommandExecute( pAbc, tmp_cmd );
                     ABC_FREE(tmp_cmd);
@@ -687,6 +688,7 @@ void CmdCommandPrint( Abc_Frame_t * pAbc, int fPrintAll, int fDetails )
             fprintf( pAbc->Out, "\n" );
             // fprintf( pAbc->Out, "--- %s ---\n", ppCommands[j]->sName );
             tmp_cmd = ABC_ALLOC(char, strlen(ppCommands[j]->sName)+4);
+            if ( !tmp_cmd ) abort();
             (void) sprintf(tmp_cmd, "%s -h", ppCommands[j]->sName);
             (void) Cmd_CommandExecute( pAbc, tmp_cmd );
             ABC_FREE(tmp_cmd);
@@ -890,7 +892,7 @@ void Gia_ManKissatCall( Abc_Frame_t * pAbc, char * pFileName, char * pArgs, int 
 ***********************************************************************/
 char * Cmd_GenScript( char ** pComms, int nComms, int nParts )
 {
-    static char pScript[1000]; int c;
+    static ABC_THREAD_LOCAL char pScript[1000]; int c;
     pScript[0] = 0;
     for ( c = 0; c < nParts; c++ ) {
         strcat( pScript, pComms[rand() % nComms] );

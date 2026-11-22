@@ -112,6 +112,7 @@ struct xSAT_Stats_t_
 
     iword nClauseLits;
     iword nLearntLits;
+    abctime timeReduceDb;
 };
 
 struct xSAT_Solver_t_
@@ -224,9 +225,9 @@ static inline void xSAT_SolverPrintClauses( xSAT_Solver_t * s )
 static inline void xSAT_SolverPrintState( xSAT_Solver_t * s )
 {
     printf( "starts        : %10d\n", s->Stats.nStarts );
-    printf( "conflicts     : %10ld\n", s->Stats.nConflicts );
-    printf( "decisions     : %10ld\n", s->Stats.nDecisions );
-    printf( "propagations  : %10ld\n", s->Stats.nPropagations );
+    printf( "conflicts     : %10lld\n", (long long)s->Stats.nConflicts );
+    printf( "decisions     : %10lld\n", (long long)s->Stats.nDecisions );
+    printf( "propagations  : %10lld\n", (long long)s->Stats.nPropagations );
 }
 
 

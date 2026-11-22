@@ -34,26 +34,43 @@ OS := $(shell uname -s)
 
 MODULES := \
 	$(wildcard src/ext*) \
-	src/base/abc src/base/abci src/base/cmd src/base/io src/base/main src/base/exor \
-	src/base/ver src/base/wlc src/base/wln src/base/acb src/base/bac src/base/cba src/base/pla src/base/test \
+	src/base/abc src/base/abcc src/base/abci src/base/cmd src/base/io src/base/main src/base/exor \
+	src/base/ver src/base/wlc src/base/wln src/base/sn src/base/parter src/base/acb src/base/pla src/base/test \
 	src/map/mapper src/map/mio src/map/super src/map/if src/map/if/acd \
 	src/map/amap src/map/cov src/map/scl src/map/mpm src/map/emap \
-	src/misc/extra src/misc/mvc src/misc/st src/misc/util src/misc/nm \
+	src/misc/extra src/misc/espresso src/misc/mvc src/misc/st src/misc/util src/misc/nm \
 	src/misc/vec src/misc/hash src/misc/tim src/misc/bzlib src/misc/zlib \
 	src/misc/mem src/misc/bar src/misc/bbl src/misc/parse src/misc/btor \
-	src/opt/cut src/opt/fxu src/opt/fxch src/opt/rwr src/opt/mfs src/opt/sim \
+	src/opt/abs2 src/opt/cut src/opt/fxu src/opt/fxch src/opt/rwr src/opt/mfs src/opt/sim \
 	src/opt/ret src/opt/fret src/opt/res src/opt/lpk src/opt/nwk src/opt/rwt src/opt/rar \
-	src/opt/cgt src/opt/csw src/opt/dar src/opt/dau src/opt/dsc src/opt/sfm src/opt/sbd src/opt/eslim src/opt/ufar src/opt/untk src/opt/util \
-	src/sat/bsat src/sat/xsat src/sat/satoko src/sat/csat src/sat/msat src/sat/psat src/sat/cnf src/sat/bmc src/sat/glucose src/sat/glucose2 src/sat/kissat src/sat/cadical \
-	src/bool/bdc src/bool/deco src/bool/dec src/bool/kit src/bool/lucky \
+	src/opt/cgt src/opt/csw src/opt/dar src/opt/drw src/opt/dau src/opt/dsc src/opt/sfm src/opt/sbd src/opt/eslim src/opt/eslim2 src/opt/ufar src/opt/untk src/opt/util \
+	src/sat/bsat src/sat/xsat src/sat/satoko src/sat/csat src/sat/msat src/sat/psat src/sat/cnf src/sat/bmc src/sat/glucose src/sat/glucose2 src/sat/glucose3 src/sat/kissat src/sat/cadical \
+	src/bool/bdc src/bool/deco src/bool/dec src/bool/decpla src/bool/kit src/bool/lms src/bool/lucky \
 	src/bool/rsb src/bool/rpo \
-	src/proof/pdr src/proof/abs src/proof/live src/proof/ssc src/proof/int \
-	src/proof/cec src/proof/acec src/proof/dch src/proof/fraig src/proof/fra src/proof/ssw \
+	src/proof/pdr src/proof/pdr2 src/proof/abs src/proof/live src/proof/ssc src/proof/int src/proof/imc \
+	src/proof/cec src/proof/acec src/proof/acec2 src/proof/dch src/proof/fraig src/proof/fra src/proof/ssw \
 	src/aig/aig src/aig/saig src/aig/gia src/aig/ioa src/aig/ivy src/aig/hop \
 	src/aig/miniaig
 
 all: $(PROG)
 default: $(PROG)
+
+# The optional frontend is an independent C++20/CMake build, started after ABC.
+# Forward the requested job count without nesting two competing build pools.
+ifeq ($(ABC_USE_SLANG),1)
+all default: sn-slang
+endif
+SN_BUILD_DIR ?= $(abspath $(ABCSRC))/build/sn-slang-make
+SLANG_JOBS ?= $(or $(patsubst -j%,%,$(filter -j%,$(MAKEFLAGS))),1)
+SLANG_CXX ?=
+.PHONY: sn-slang
+sn-slang: $(PROG)
+	cmake -S "$(ABCSRC)/tools/sn" -B "$(SN_BUILD_DIR)" \
+	    -DCMAKE_BUILD_TYPE=Release $(if $(SLANG_CXX),-DCMAKE_CXX_COMPILER="$(SLANG_CXX)") \
+	    -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$(abspath .)" \
+	    -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE="$(abspath .)" \
+	    $(if $(SLANG_SOURCE_DIR),-DSLANG_SOURCE_DIR="$(abspath $(SLANG_SOURCE_DIR))")
+	env -u MAKEFLAGS cmake --build "$(SN_BUILD_DIR)" --config Release --target sn --parallel $(SLANG_JOBS)
 
 ARCHFLAGS_EXE ?= ./arch_flags
 
@@ -74,6 +91,11 @@ ARCHFLAGS := $(ARCHFLAGS)
 OPTFLAGS  ?= -g -O
 
 CFLAGS    += -Wall -Wno-unused-function -Wno-write-strings -Wno-sign-compare $(ARCHFLAGS)
+ifeq ($(ABC_USE_STDIO_REDIRECT),1)
+  CFLAGS += -include $(abspath $(ABCSRC))/src/misc/util/abc_stdio.h
+  # These files select POSIX before their first system header.
+  src/base/sn/snRead.o src/base/sn/snRead.d src/base/sn/snCom.o src/base/sn/snCom.d: CFLAGS += -D_POSIX_C_SOURCE=200809L
+endif
 ifneq ($(findstring arm,$(shell uname -m)),)
 	CFLAGS += -DABC_MEMALIGN=4
 endif
@@ -111,6 +133,12 @@ ifndef ABC_USE_NO_PTHREADS
   CFLAGS += -DABC_USE_PTHREADS
   LIBS += -lpthread
   $(call abc_info,$(MSG_PREFIX)Using pthreads)
+endif
+
+# whether to compile without thread-local frame selection
+ifdef ABC_USE_NO_THREAD_LOCAL
+  CFLAGS += -DABC_USE_NO_THREAD_LOCAL=1
+  $(call abc_info,$(MSG_PREFIX)Disabling thread-local frame selection)
 endif
 
 # whether to compile into position independent code
@@ -176,11 +204,38 @@ OBJ := \
 	$(patsubst %.c, %.o,  $(filter %.c, $(SRC)))  \
 	$(patsubst %.y, %.o,  $(filter %.y, $(SRC)))
 
+# Keep command objects distinct from same-named abci objects in incremental archives.
+ABCC_OBJ := $(filter-out src/base/abcc/abc.o,$(filter src/base/abcc/%.o,$(OBJ)))
+OBJ := $(filter-out $(ABCC_OBJ),$(OBJ)) $(patsubst src/base/abcc/%.o,src/base/abcc/abcc_%.o,$(ABCC_OBJ))
+
+ESPRESSO_OBJ := $(filter src/misc/espresso/%.o,$(OBJ))
+OBJ := $(filter-out $(ESPRESSO_OBJ),$(OBJ)) $(patsubst src/misc/espresso/%.o,src/misc/espresso/espresso_%.o,$(ESPRESSO_OBJ))
+
 LIBOBJ := $(filter-out src/base/main/main.o,$(OBJ))
 
 DEP := $(OBJ:.o=.d)
 
 # implicit rules
+
+src/base/abcc/abcc_%.o: src/base/abcc/%.c
+	@mkdir -p $(dir $@)
+	@echo "$(MSG_PREFIX)\`\` Compiling:" $(LOCAL_PATH)/$<
+	$(VERBOSE)$(CC) -c $(OPTFLAGS) $(INCLUDES) $(CPPFLAGS) $(CFLAGS) $< -o $@
+
+src/base/abcc/abcc_%.d: src/base/abcc/%.c
+	@mkdir -p $(dir $@)
+	@echo "$(MSG_PREFIX)\`\` Generating dependency:" $(LOCAL_PATH)/$<
+	$(VERBOSE)$(ABCSRC)/depends.sh "$(CC)" src/base/abcc $(OPTFLAGS) $(INCLUDES) $(CPPFLAGS) $(CFLAGS) -MT abcc_$*.o $< > $@
+
+src/misc/espresso/espresso_%.o: src/misc/espresso/%.c
+	@mkdir -p $(dir $@)
+	@echo "$(MSG_PREFIX)\`\` Compiling:" $(LOCAL_PATH)/$<
+	$(VERBOSE)$(CC) -c $(OPTFLAGS) $(INCLUDES) $(CPPFLAGS) $(CFLAGS) $< -o $@
+
+src/misc/espresso/espresso_%.d: src/misc/espresso/%.c
+	@mkdir -p $(dir $@)
+	@echo "$(MSG_PREFIX)\`\` Generating dependency:" $(LOCAL_PATH)/$<
+	$(VERBOSE)$(ABCSRC)/depends.sh "$(CC)" src/misc/espresso $(OPTFLAGS) $(INCLUDES) $(CPPFLAGS) $(CFLAGS) -MT espresso_$*.o $< > $@
 
 %.o: %.c
 	@mkdir -p $(dir $@)

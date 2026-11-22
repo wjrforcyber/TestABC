@@ -23,6 +23,8 @@
 #include "bool/dec/dec.h"
 #include "map/if/if.h"
 #include "aig/miniaig/ndr.h"
+#include "misc/util/abc_io.h"
+#include <errno.h>
 
 #ifdef ABC_USE_CUDD
 #include "bdd/extrab/extraBdd.h"
@@ -35,7 +37,7 @@ ABC_NAMESPACE_IMPL_START
 ///                        DECLARATIONS                              ///
 ////////////////////////////////////////////////////////////////////////
 
-static Abc_Frame_t * s_GlobalFrame = NULL;
+static ABC_THREAD_LOCAL Abc_Frame_t * s_GlobalFrame = NULL;
 
 ////////////////////////////////////////////////////////////////////////
 ///                     FUNCTION DEFINITIONS                         ///
@@ -68,29 +70,36 @@ void *      Abc_FrameReadManDd()                             { if ( s_GlobalFram
 void *      Abc_FrameReadManDec()                            { if ( s_GlobalFrame->pManDec == NULL ) s_GlobalFrame->pManDec = Dec_ManStart();                                        return s_GlobalFrame->pManDec; } 
 void *      Abc_FrameReadManDsd()                            { return s_GlobalFrame->pManDsd;      } 
 void *      Abc_FrameReadManDsd2()                           { return s_GlobalFrame->pManDsd2;     }
+void *      Abc_FrameReadManDar()                            { return s_GlobalFrame->pManDar;      }
+void *      Abc_FrameReadManCnf()                            { return s_GlobalFrame->pManCnf;      }
+void *      Abc_FrameReadManAigR()                           { return s_GlobalFrame->pManAigR;     }
+void *      Abc_FrameReadManNpn()                            { return s_GlobalFrame->pManNpn;      }
+void *      Abc_FrameReadManSdm()                            { return s_GlobalFrame->pManSdm;      }
+void *      Abc_FrameReadManLms()                            { return s_GlobalFrame->pManLms;      }
+void *      Abc_FrameReadManBest()                           { return s_GlobalFrame->pManBest;     }
 char *      Abc_FrameReadFlag( char * pFlag )                { return Cmd_FlagReadByName( s_GlobalFrame, pFlag );   }
 Vec_Ptr_t * Abc_FrameReadSignalNames()                       { return s_GlobalFrame->vSignalNames; }
 char *      Abc_FrameReadSpecName()                          { return s_GlobalFrame->pSpecName;    }
 
-int         Abc_FrameReadBmcFrames( Abc_Frame_t * p )        { return s_GlobalFrame->nFrames;      }               
-int         Abc_FrameReadProbStatus( Abc_Frame_t * p )       { return s_GlobalFrame->Status;       }               
-void *      Abc_FrameReadCex( Abc_Frame_t * p )              { return s_GlobalFrame->pCex;         }        
-Vec_Ptr_t * Abc_FrameReadCexVec( Abc_Frame_t * p )           { return s_GlobalFrame->vCexVec;      }        
-Vec_Int_t * Abc_FrameReadStatusVec( Abc_Frame_t * p )        { return s_GlobalFrame->vStatuses;    }        
-Vec_Ptr_t * Abc_FrameReadPoEquivs( Abc_Frame_t * p )         { return s_GlobalFrame->vPoEquivs;    }        
-Vec_Int_t * Abc_FrameReadPoStatuses( Abc_Frame_t * p )       { return s_GlobalFrame->vStatuses;    }        
-Vec_Int_t * Abc_FrameReadObjIds( Abc_Frame_t * p )           { return s_GlobalFrame->vAbcObjIds;   }        
-Abc_Nam_t * Abc_FrameReadJsonStrs( Abc_Frame_t * p )         { return s_GlobalFrame->pJsonStrs;    }     
-Vec_Wec_t * Abc_FrameReadJsonObjs( Abc_Frame_t * p )         { return s_GlobalFrame->vJsonObjs;    }   
+int         Abc_FrameReadBmcFrames( Abc_Frame_t * p )        { return p->nFrames;      }
+int         Abc_FrameReadProbStatus( Abc_Frame_t * p )       { return p->Status;       }
+void *      Abc_FrameReadCex( Abc_Frame_t * p )              { return p->pCex;         }
+Vec_Ptr_t * Abc_FrameReadCexVec( Abc_Frame_t * p )           { return p->vCexVec;      }
+Vec_Int_t * Abc_FrameReadStatusVec( Abc_Frame_t * p )        { return p->vStatuses;    }
+Vec_Ptr_t * Abc_FrameReadPoEquivs( Abc_Frame_t * p )         { return p->vPoEquivs;    }
+Vec_Int_t * Abc_FrameReadPoStatuses( Abc_Frame_t * p )       { return p->vStatuses;    }
+Vec_Int_t * Abc_FrameReadObjIds( Abc_Frame_t * p )           { return p->vAbcObjIds;   }
+Abc_Nam_t * Abc_FrameReadJsonStrs( Abc_Frame_t * p )         { return p->pJsonStrs;    }
+Vec_Wec_t * Abc_FrameReadJsonObjs( Abc_Frame_t * p )         { return p->vJsonObjs;    }
        
-int         Abc_FrameReadCexPiNum( Abc_Frame_t * p )         { return s_GlobalFrame->pCex->nPis;   }               
-int         Abc_FrameReadCexRegNum( Abc_Frame_t * p )        { return s_GlobalFrame->pCex->nRegs;  }               
-int         Abc_FrameReadCexPo( Abc_Frame_t * p )            { return s_GlobalFrame->pCex->iPo;    }               
-int         Abc_FrameReadCexFrame( Abc_Frame_t * p )         { return s_GlobalFrame->pCex->iFrame; }               
+int         Abc_FrameReadCexPiNum( Abc_Frame_t * p )         { return p->pCex->nPis;   }
+int         Abc_FrameReadCexRegNum( Abc_Frame_t * p )        { return p->pCex->nRegs;  }
+int         Abc_FrameReadCexPo( Abc_Frame_t * p )            { return p->pCex->iPo;    }
+int         Abc_FrameReadCexFrame( Abc_Frame_t * p )         { return p->pCex->iFrame; }
 
-void        Abc_FrameInputNdr( Abc_Frame_t * pAbc, void * pData ) { Ndr_Delete(s_GlobalFrame->pNdr); s_GlobalFrame->pNdr = pData;                        }
-void *      Abc_FrameOutputNdr( Abc_Frame_t * pAbc )         { void * pData = s_GlobalFrame->pNdr; s_GlobalFrame->pNdr = NULL; return pData;             }  
-int *       Abc_FrameOutputNdrArray( Abc_Frame_t * pAbc )    { int * pArray = s_GlobalFrame->pNdrArray; s_GlobalFrame->pNdrArray = NULL; return pArray;  }
+void        Abc_FrameInputNdr( Abc_Frame_t * pAbc, void * pData ) { Ndr_Delete(pAbc->pNdr); pAbc->pNdr = pData;                        }
+void *      Abc_FrameOutputNdr( Abc_Frame_t * pAbc )         { void * pData = pAbc->pNdr; pAbc->pNdr = NULL; return pData;             }
+int *       Abc_FrameOutputNdrArray( Abc_Frame_t * pAbc )    { int * pArray = pAbc->pNdrArray; pAbc->pNdrArray = NULL; return pArray;  }
 
 void        Abc_FrameSetLibLut( void * pLib )                { s_GlobalFrame->pLibLut[0]= pLib;    } 
 void        Abc_FrameSetLibLutI( void * pLib, int i )        { s_GlobalFrame->pLibLut[i]= pLib;    } 
@@ -105,6 +114,13 @@ void        Abc_FrameSetNFrames( int nFrames )               { ABC_FREE( s_Globa
 void        Abc_FrameSetStatus( int Status )                 { ABC_FREE( s_GlobalFrame->pCex ); s_GlobalFrame->Status = Status;   }
 void        Abc_FrameSetManDsd( void * pMan )                { if (s_GlobalFrame->pManDsd  && s_GlobalFrame->pManDsd  != pMan) If_DsdManFree((If_DsdMan_t *)s_GlobalFrame->pManDsd,  0); s_GlobalFrame->pManDsd = pMan;  }
 void        Abc_FrameSetManDsd2( void * pMan )               { if (s_GlobalFrame->pManDsd2 && s_GlobalFrame->pManDsd2 != pMan) If_DsdManFree((If_DsdMan_t *)s_GlobalFrame->pManDsd2, 0); s_GlobalFrame->pManDsd2 = pMan; }
+void        Abc_FrameSetManDar( void * pMan )                { s_GlobalFrame->pManDar = pMan; }
+void        Abc_FrameSetManCnf( void * pMan )                { s_GlobalFrame->pManCnf = pMan; }
+void        Abc_FrameSetManAigR( void * pMan )               { s_GlobalFrame->pManAigR = pMan; }
+void        Abc_FrameSetManNpn( void * pMan )                { s_GlobalFrame->pManNpn = pMan; }
+void        Abc_FrameSetManSdm( void * pMan )                { s_GlobalFrame->pManSdm = pMan; }
+void        Abc_FrameSetManLms( void * pMan )                { s_GlobalFrame->pManLms = pMan; }
+void        Abc_FrameSetManBest( void * pMan )               { s_GlobalFrame->pManBest = pMan; }
 void        Abc_FrameSetInv( Vec_Int_t * vInv )              { Vec_IntFreeP(&s_GlobalFrame->pAbcWlcInv); s_GlobalFrame->pAbcWlcInv = vInv; }
 void        Abc_FrameSetJsonStrs( Abc_Nam_t * pStrs )        { Abc_NamDeref( s_GlobalFrame->pJsonStrs ); s_GlobalFrame->pJsonStrs = pStrs; }
 void        Abc_FrameSetJsonObjs( Vec_Wec_t * vObjs )        { Vec_WecFreeP(&s_GlobalFrame->vJsonObjs ); s_GlobalFrame->vJsonObjs = vObjs; }
@@ -115,7 +131,13 @@ int         Abc_FrameIsBatchMode()                           { return s_GlobalFr
 void        Abc_FrameSetBatchMode( int Mode )                { if ( s_GlobalFrame ) s_GlobalFrame->fBatchMode = Mode;             } 
 
 int         Abc_FrameIsBridgeMode()                          { return s_GlobalFrame ? s_GlobalFrame->fBridgeMode : 0;             } 
-void        Abc_FrameSetBridgeMode()                         { if ( s_GlobalFrame ) s_GlobalFrame->fBridgeMode = 1;               } 
+void        Abc_FrameSetBridgeMode()
+{
+    if ( s_GlobalFrame && s_GlobalFrame->pLog )
+        fprintf( s_GlobalFrame->Err, "Cannot enable bridge mode for a captured frame.\n" );
+    else if ( s_GlobalFrame )
+        s_GlobalFrame->fBridgeMode = 1;
+}
 
 char *      Abc_FrameReadDrivingCell()                       { return s_GlobalFrame->pDrivingCell;    }              
 float       Abc_FrameReadMaxLoad()                           { return s_GlobalFrame->MaxLoad;         }      
@@ -207,12 +229,10 @@ Abc_Frame_t * Abc_FrameAllocate()
 ***********************************************************************/
 void Abc_FrameDeallocate( Abc_Frame_t * p )
 {
-    extern void Rwt_ManGlobalStop();
     extern void undefine_cube_size();
 //    extern void Ivy_TruthManStop();
 //    Abc_HManStop();
 //    undefine_cube_size();
-    Rwt_ManGlobalStop();
 //    Ivy_TruthManStop();
     if ( p->vAbcObjIds)  Vec_IntFree( p->vAbcObjIds );
     if ( p->vCexVec   )  Vec_PtrFreeFree( p->vCexVec );
@@ -248,11 +268,11 @@ void Abc_FrameDeallocate( Abc_Frame_t * p )
     ABC_FREE( p->pCex2 );
     ABC_FREE( p->pCex );
     Vec_IntFreeP( &p->pAbcWlcInv );
-    Abc_NamDeref( s_GlobalFrame->pJsonStrs );
-    Vec_WecFreeP( &s_GlobalFrame->vJsonObjs );  
-    Ndr_Delete( s_GlobalFrame->pNdr );
-    ABC_FREE( s_GlobalFrame->pNdrArray );
-    Abc_FrameStoreStop( s_GlobalFrame );
+    Abc_NamDeref( p->pJsonStrs );
+    Vec_WecFreeP( &p->vJsonObjs );
+    Ndr_Delete( p->pNdr );
+    ABC_FREE( p->pNdrArray );
+    Abc_FrameStoreStop( p );
 
     Gia_ManStopP( &p->pGiaMiniAig );
     Gia_ManStopP( &p->pGiaMiniLut );
@@ -262,8 +282,11 @@ void Abc_FrameDeallocate( Abc_Frame_t * p )
     ABC_FREE( p->pBoxes );
     
 
+    if ( p->pLog )
+        fclose( p->pLog );
+    if ( s_GlobalFrame == p )
+        s_GlobalFrame = NULL;
     ABC_FREE( p );
-    s_GlobalFrame = NULL;
 }
 
 
@@ -351,6 +374,41 @@ Gia_Man_t * Abc_FrameReadGia( Abc_Frame_t * p )
 
 /**Function*************************************************************
 
+  Synopsis    [Borrows the current vector of level-indexed AIG witnesses.]
+
+  Description [The frame owns both the vector and its non-NULL entries.
+  Abc_FrameReadGiasLutSize gives the LUT width for mapped levels, or zero
+  when the vector uses AND levels. Standard-cell witnesses are packed in
+  increasing pin delay and use -1.]
+
+***********************************************************************/
+Vec_Ptr_t * Abc_FrameReadGias( Abc_Frame_t * p )
+{
+    return p->pGias;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Returns LUT width, zero for AND levels, or -1 for cell delays.]
+
+***********************************************************************/
+int Abc_FrameReadGiasLutSize( Abc_Frame_t * p )
+{
+    return p->nGiasLutSize;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Returns the cell witness library signature, or zero for AIGs and LUTs.]
+
+***********************************************************************/
+word Abc_FrameReadGiasLibSignature( Abc_Frame_t * p )
+{
+    return p->GiasLibSignature;
+}
+
+/**Function*************************************************************
+
   Synopsis    []
 
   Description []
@@ -379,6 +437,37 @@ FILE * Abc_FrameReadOut( Abc_Frame_t * p )
 FILE * Abc_FrameReadErr( Abc_Frame_t * p )
 {
     return p->Err;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Copies a quiescent log without changing its write position.]
+
+***********************************************************************/
+int Abc_FrameCopyLog( Abc_Frame_t * p, FILE * pFile )
+{
+    char Buffer[4096];
+    fpos_t Pos;
+    size_t nBytes;
+    int fOk = 1;
+    if ( p == NULL || p->pLog == NULL || pFile == NULL || pFile == p->pLog )
+    {
+        errno = EINVAL;
+        return 0;
+    }
+    if ( (fflush)(p->pLog) || fgetpos(p->pLog, &Pos) || fseek(p->pLog, 0, SEEK_SET) )
+        return 0;
+    while ( (nBytes = fread(Buffer, 1, sizeof(Buffer), p->pLog)) != 0 )
+        if ( (fwrite)(Buffer, 1, nBytes, pFile) != nBytes )
+        {
+            fOk = 0;
+            break;
+        }
+    if ( ferror(p->pLog) || (fflush)(pFile) )
+        fOk = 0;
+    if ( fsetpos(p->pLog, &Pos) )
+        fOk = 0;
+    return fOk;
 }
 
 /**Function*************************************************************
@@ -609,12 +698,40 @@ void Abc_FrameDeleteAllNetworks( Abc_Frame_t * p )
         Abc_NtkDelete( pNtk );
     // set the current network empty
     p->pNtkCur = NULL;
+    Abc_FrameSetGias( p, NULL, 0, 0 );
 //    fprintf( p->Out, "All networks have been deleted.\n" );
     Gia_ManStopP( &p->pGia );
     Gia_ManStopP( &p->pGia2 );
     Gia_ManStopP( &p->pGiaBest );
     Gia_ManStopP( &p->pGiaBest2 );
     Gia_ManStopP( &p->pGiaSaved );
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Installs the witness vector and its mapping metadata together.]
+
+  Description [The frame owns the vector and each distinct non-NULL witness.
+  A witness may occupy several slots. Entries in a new vector must be owned
+  independently of the current GIA and of the vector being replaced. Passing
+  the installed vector updates its metadata. Passing NULL clears the set.
+  Use width zero for AIGs, a positive LUT width, or -1 with a cell library signature.]
+
+***********************************************************************/
+void Abc_FrameSetGias( Abc_Frame_t * p, Vec_Ptr_t * vNew, int nLutSize, word LibSignature )
+{
+    Gia_Man_t * pGia;
+    int i;
+    if ( p->pGias && p->pGias != vNew )
+    {
+        Vec_PtrUniqify( p->pGias, NULL );
+        Vec_PtrForEachEntry( Gia_Man_t *, p->pGias, pGia, i )
+            if ( pGia ) Gia_ManStop( pGia );
+        Vec_PtrFree( p->pGias );
+    }
+    p->pGias = vNew;
+    p->nGiasLutSize = vNew ? nLutSize : 0;
+    p->GiasLibSignature = vNew && nLutSize == -1 ? LibSignature : 0;
 }
 
 /**Function*************************************************************
@@ -631,6 +748,123 @@ void Abc_FrameDeleteAllNetworks( Abc_Frame_t * p )
 void Abc_FrameSetGlobalFrame( Abc_Frame_t * p )
 {
     s_GlobalFrame = p;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Creates an initialized frame without making it current.]
+
+***********************************************************************/
+Abc_Frame_t * Abc_FrameCreate()
+{
+    Abc_Frame_t * pAbc = Abc_FrameAllocate();
+    Abc_Frame_t * pPrevious = Abc_FrameEnter( pAbc );
+    Abc_FrameInit( pAbc );
+    Abc_FrameLeave( pPrevious );
+    return pAbc;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Creates a private frame using the calling thread's output destinations.]
+
+  Description [The caller owns the streams and keeps them open through
+  destruction of the child. The streams also capture initialization. ]
+
+  SideEffects []
+
+  SeeAlso     [Abc_FrameCreate Abc_FrameCreateWithLog]
+
+***********************************************************************/
+Abc_Frame_t * Abc_FrameCreateChild( void )
+{
+    Abc_Frame_t * pAbc = Abc_FrameAllocate(), * pPrevious;
+    pAbc->Out = Abc_IoReadOut();
+    pAbc->Err = Abc_IoReadErr();
+    pPrevious = Abc_FrameEnter( pAbc );
+    Abc_FrameInit( pAbc );
+    Abc_FrameLeave( pPrevious );
+    return pAbc;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Creates a frame owning an isolated temporary log file.]
+
+  Description [Returns NULL if capture is unavailable or log creation fails.
+  Both streams, including initialization messages, go into the owned log.
+  Frames are initialized/destroyed serially; workers must join before copying
+  the log or destroying its frame. Ordinary Abc_FrameCreate is unchanged.]
+
+***********************************************************************/
+Abc_Frame_t * Abc_FrameCreateWithLog( void )
+{
+    Abc_Frame_t * pAbc, * pPrevious;
+    FILE * pLog;
+    if ( !Abc_IoIsEnabled() )
+    {
+        errno = ENOSYS;
+        return NULL;
+    }
+    pLog = tmpfile();
+    if ( pLog == NULL )
+        return NULL;
+    pAbc = Abc_FrameAllocate();
+    pAbc->Out = pAbc->Err = pAbc->pLog = pLog;
+    pPrevious = Abc_FrameEnter( pAbc );
+    Abc_FrameInit( pAbc );
+    Abc_FrameLeave( pPrevious );
+    return pAbc;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Destroys an explicitly created frame.]
+
+***********************************************************************/
+void Abc_FrameDestroy( Abc_Frame_t * pAbc )
+{
+    Abc_Frame_t * pPrevious;
+    assert( pAbc != NULL );
+    assert( s_GlobalFrame != pAbc );
+    pPrevious = Abc_FrameEnter( pAbc );
+    Abc_FrameEnd( pAbc );
+    Abc_FrameDeallocate( pAbc );
+    Abc_FrameLeave( pPrevious );
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Makes the given frame current and returns the old frame.]
+
+***********************************************************************/
+Abc_Frame_t * Abc_FrameEnter( Abc_Frame_t * pAbc )
+{
+    Abc_Frame_t * pPrevious = s_GlobalFrame;
+    assert( pAbc != NULL );
+    s_GlobalFrame = pAbc;
+    return pPrevious;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Restores the frame returned by Abc_FrameEnter().]
+
+***********************************************************************/
+void Abc_FrameLeave( Abc_Frame_t * pPrevious )
+{
+    s_GlobalFrame = pPrevious;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Returns the current frame and requires one to be set.]
+
+***********************************************************************/
+Abc_Frame_t * Abc_FrameCurrent()
+{
+    assert( s_GlobalFrame != NULL );
+    return s_GlobalFrame;
 }
 
 /**Function*************************************************************
@@ -670,6 +904,21 @@ Abc_Frame_t * Abc_FrameGetGlobalFrame()
 Abc_Frame_t * Abc_FrameReadGlobalFrame()
 {
     return s_GlobalFrame;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Returns the NF2 library caches for the current ABC frame.]
+
+  Description [An explicitly created frame can move between idle workers.
+  Calls using the standalone mapper without a frame retain the thread-local
+  caches and explicit cleanup provided by that interface.]
+
+***********************************************************************/
+Abc_Nf2Cache_t * Abc_FrameReadNf2Cache( void )
+{
+    static ABC_THREAD_LOCAL Abc_Nf2Cache_t Standalone;
+    return s_GlobalFrame ? &s_GlobalFrame->Nf2Cache : &Standalone;
 }
 
 /**Function*************************************************************
@@ -764,4 +1013,3 @@ void Abc_FrameCheckPoConstTest( Abc_Frame_t * p )
 
 
 ABC_NAMESPACE_IMPL_END
-

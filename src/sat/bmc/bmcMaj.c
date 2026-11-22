@@ -202,7 +202,7 @@ static inline int Maj_ManFindFanin( Maj_Man_t * p, int i, int k )
 static inline int Maj_ManEval( Maj_Man_t * p )
 {
     int fUseMiddle = 1;
-    static int Flag = 0;
+    int Flag = 0;
     int i, k, iMint; word * pFanins[3];
     for ( i = p->nVars + 2; i < p->nObjs; i++ )
     {
@@ -586,7 +586,7 @@ static inline char * Exa_ManObjName( Exa_Man_t * p, int iObj, char * pBuffer )
 }
 static inline int Exa_ManEval( Exa_Man_t * p )
 {
-    static int Flag = 0;
+    int Flag = 0;
     int i, k, iMint; word * pFanins[2];
     for ( i = p->nVars; i < p->nObjs; i++ )
     {
@@ -645,7 +645,7 @@ void Exa_ManDumpBlif( Exa_Man_t * p, int fCompl )
     for ( i = 0; i < p->nVars; i++ )
         fprintf( pFile, " %c", 'a'+i );
     fprintf( pFile, "\n" );
-    fprintf( pFile, ".outputs F\n" );
+    fprintf( pFile, ".outputs FF\n" );
     for ( i = p->nObjs - 1; i >= p->nVars; i-- )
     {
         int iVarStart = 1 + 3*(i - p->nVars);//
@@ -661,7 +661,7 @@ void Exa_ManDumpBlif( Exa_Man_t * p, int fCompl )
             fprintf( pFile, " %s", Exa_ManObjName(p, iVar, Name) );
         }
         if ( i == p->nObjs - 1 )
-            fprintf( pFile, " F\n" );
+            fprintf( pFile, " FF\n" );
         else
             fprintf( pFile, " %s\n", Exa_ManObjName(p, i, Name) );
         if ( i == p->nObjs - 1 && fCompl )
@@ -1429,7 +1429,7 @@ static inline int Exa3_ManFindFanin( Exa3_Man_t * p, int i, int k )
 }
 static inline int Exa3_ManEval( Exa3_Man_t * p )
 {
-    static int Flag = 0;
+    int Flag = 0;
     int i, k, j, iMint; word * pFanins[6];
     for ( i = p->nVars; i < p->nObjs; i++ )
     {
@@ -2035,16 +2035,20 @@ int Exa3_ManExactSynthesis( Bmc_EsPar_t * pPars )
 
 char * Exa_TimeStamp()
 {
-    static char Buffer[100];
+    static ABC_THREAD_LOCAL char Buffer[100];
     time_t ltime;
-    struct tm *tm_info;
+    struct tm Time;
 
     // Get the current time
     time(&ltime);
-    tm_info = localtime(&ltime);
+#ifdef _WIN32
+    localtime_s( &Time, &ltime );
+#else
+    localtime_r( &ltime, &Time );
+#endif
 
     // Format the time as YYYY_MM_DD__HH_MM_SS
-    strftime(Buffer, sizeof(Buffer), "%Y_%m_%d__%H_%M_%S", tm_info);
+    strftime(Buffer, sizeof(Buffer), "%Y_%m_%d__%H_%M_%S", &Time);
     
     return Buffer;
 }
@@ -3054,6 +3058,7 @@ static inline int Exa5_ManAddClause4( Exa5_Man_t * p, int Lit0, int Lit1, int Li
 static inline void Exa5_ManAddOneHot( Exa5_Man_t * p, int * pLits, int nLits )
 {
     int n, m;
+    if ( nLits < 0 || nLits > MAJ_NOBJS ) abort();
     for ( n = 0;   n < nLits; n++ )
     for ( m = n+1; m < nLits; m++ )
         Exa5_ManAddClause4( p, Abc_LitNot(pLits[n]), Abc_LitNot(pLits[m]), 0, 0, 0 );
@@ -3062,6 +3067,7 @@ static inline void Exa5_ManAddGroup( Exa5_Man_t * p, int iVar, int nVars )
 {
     int i, pLits[MAJ_NOBJS];
     assert( nVars+1 <= MAJ_NOBJS );
+    if ( (unsigned)nVars >= MAJ_NOBJS ) abort();
     pLits[0] = Abc_Var2Lit( iVar, 1 );
     for ( i = 1; i <= nVars; i++ )
         pLits[i] = Abc_Var2Lit( iVar+i, 0 );
@@ -3096,7 +3102,9 @@ int Exa5_ManGenStart( Exa5_Man_t * p, int fOnlyAnd, int fFancy, int fOrderNodes,
                 int iObj   = Vec_IntEntry( p->vFans, iVar );
                 int iNode0 = (iObj >>  0) & 0xFF;
                 int iNode1 = (iObj >>  8) & 0xFF;
+                (void)iNode1;
                 int iNode2 = (iObj >> 16) & 0xFF;
+                (void)iNode2;
                 assert( iObj > 0 );
                 assert( iNode1 == j );
                 assert( iNode2 == i );
@@ -3109,6 +3117,7 @@ int Exa5_ManGenStart( Exa5_Man_t * p, int fOnlyAnd, int fFancy, int fOrderNodes,
                     int jNode0 = (jObj >>  0) & 0xFF;
                     int jNode1 = (jObj >>  8) & 0xFF;
                     int jNode2 = (jObj >> 16) & 0xFF;
+                    (void)jNode2;
                     if ( jObj == 0 )
                         continue;
                     assert( jNode2 == j );
@@ -3851,6 +3860,7 @@ struct Exa6_Man_t_
     int               nCnfVars; 
     int               nCnfVars2; 
     int               nCnfClauses;
+    int               iVarOutCompl; // first output-polarity variable, or 0 when fixed
     FILE *            pFile;
 };
 
@@ -3868,7 +3878,15 @@ struct Exa6_Man_t_
 int Exa6_ManMarkup( Exa6_Man_t * p )
 {
     int i, k, j, nVars[3] = {1 + 3*p->nNodes, 0, 3*p->nNodes*Vec_WrdSize(p->vSimsIn)};
+    word First = Vec_WrdEntry(p->vSimsOut, 0);
     assert( p->nObjs <= MAJ_NOBJS );
+    // A relation may allow several first-row tuples. Keep their phases free
+    // while normalizing internal nodes, rather than committing to one tuple.
+    if ( First & (First - 1) )
+    {
+        p->iVarOutCompl = nVars[0];
+        nVars[0] += p->nOuts;
+    }
     for ( i = p->nDivs; i < p->nDivs + p->nNodes; i++ )
         for ( k = 0; k < 2; k++ )
             for ( j = 1+!k; j < i-k; j++ )
@@ -4072,8 +4090,9 @@ int Exa6_ManGenStart( Exa6_Man_t * p, int fOnlyAnd, int fFancy, int fOrderNodes,
 void Exa6_ManGenMint( Exa6_Man_t * p, int iMint, int fOnlyAnd, int fFancy )
 {
     int iNodeVar = p->nCnfVars + 3*p->nNodes*(iMint - Vec_WrdSize(p->vSimsIn));
-    int iOutMint = Abc_Tt6FirstBit( Vec_WrdEntry(p->vSimsOut, iMint) );
-    int fOnlyOne = Abc_TtSuppOnlyOne( (int)Vec_WrdEntry(p->vSimsOut, iMint) );
+    word OutMint = Vec_WrdEntry(p->vSimsOut, iMint);
+    int iOutMint = Abc_Tt6FirstBit( OutMint );
+    int fOnlyOne = OutMint && !(OutMint & (OutMint - 1));
     int i, k, n, j, VarVals[MAJ_NOBJS];
     int fAllOnes = Abc_TtCountOnes( Vec_WrdEntry(p->vSimsOut, iMint) ) == (1 << p->nOuts);
     if ( fAllOnes )
@@ -4136,8 +4155,19 @@ void Exa6_ManGenMint( Exa6_Man_t * p, int iMint, int fOnlyAnd, int fFancy )
     for ( i = p->nDivs + p->nNodes; i < p->nObjs; i++ )
     {
         for ( j = 0; j < p->nDivs + p->nNodes; j++ ) if ( p->VarMarks[i][0][j] )
-        for ( n = 0; n < 2; n++ )
-            Exa6_ManAddClause4( p, Abc_Var2Lit(p->VarMarks[i][0][j], 1), Abc_LitNotCond(VarVals[j], n), Abc_LitNotCond(VarVals[i], !n), 0);
+        {
+            for ( n = 0; n < 2; n++ )
+                if ( p->iVarOutCompl )
+                {
+                    int iVar = p->iVarOutCompl + i - p->nDivs - p->nNodes;
+                    // The selected source XOR the shared polarity equals this
+                    // row's output. The relation constrains whole output tuples.
+                    for ( k = 0; k < 2; k++ )
+                        Exa6_ManAddClause4( p, Abc_Var2Lit(p->VarMarks[i][0][j], 1), Abc_LitNotCond(VarVals[j], n), Abc_LitNotCond(VarVals[i], k), Abc_Var2Lit(iVar, n == k) );
+                }
+                else
+                    Exa6_ManAddClause4( p, Abc_Var2Lit(p->VarMarks[i][0][j], 1), Abc_LitNotCond(VarVals[j], n), Abc_LitNotCond(VarVals[i], !n), 0);
+        }
     }
 }
 void Exa6_ManGenCnf( Exa6_Man_t * p, char * pFileName, int fOnlyAnd, int fFancy, int fOrderNodes, int fUniqFans )
@@ -4147,7 +4177,9 @@ void Exa6_ManGenCnf( Exa6_Man_t * p, char * pFileName, int fOnlyAnd, int fFancy,
     p->pFile = fopen( pFileName, "wb" );
     fputs( "p cnf                \n", p->pFile );
     Exa6_ManGenStart( p, fOnlyAnd, fFancy, fOrderNodes, fUniqFans );
-    for ( m = 1; m < Vec_WrdSize(p->vSimsIn); m++ )
+    // With free output phases, the first row must constrain their joint
+    // assignment too. Its internal node values are all zero as before.
+    for ( m = p->iVarOutCompl ? 0 : 1; m < Vec_WrdSize(p->vSimsIn); m++ )
         Exa6_ManGenMint( p, m, fOnlyAnd, fFancy );
     rewind( p->pFile );
     fprintf( p->pFile, "p cnf %d %d", p->nCnfVars + p->nCnfVars2, p->nCnfClauses );
@@ -4195,8 +4227,9 @@ void Exa6_ManPrintSolution( Exa6_Man_t * p, Vec_Int_t * vValues, int fFancy )
     for ( i = p->nDivs + p->nNodes; i < p->nObjs; i++ )
     {
         int iVar = Exa6_ManFindFanin( p, vValues, i, 0 );
+        int fComp = p->iVarOutCompl ? Vec_IntEntry(vValues, p->iVarOutCompl + i - p->nDivs - p->nNodes) : 0;
         printf( "%2d  = ", i );
-        Exa6_ManPrintFanin( p, iVar, 0 );
+        Exa6_ManPrintFanin( p, iVar, fComp );
         printf( "\n" );
     }
     for ( i = p->nDivs + p->nNodes - 1; i >= p->nDivs; i-- )
@@ -4248,7 +4281,8 @@ Mini_Aig_t * Exa6_ManMiniAig( Exa6_Man_t * p, Vec_Int_t * vValues, int fFancy )
     for ( i = p->nDivs + p->nNodes; i < p->nObjs; i++ )
     {
         int iVar = Exa6_ManFindFanin( p, vValues, i, 0 );
-        Mini_AigCreatePo( pMini, Abc_Var2Lit(iVar, Compl[iVar]) );
+        int fComp = p->iVarOutCompl ? Vec_IntEntry(vValues, p->iVarOutCompl + i - p->nDivs - p->nNodes) : 0;
+        Mini_AigCreatePo( pMini, Abc_Var2Lit(iVar, Compl[iVar] ^ fComp) );
     }
     assert( p->nObjs == Mini_AigNodeNum(pMini) );
     return pMini;
@@ -4411,12 +4445,12 @@ void Exa_ManExactSynthesis6( Bmc_EsPar_t * pPars, char * pFileName )
         for ( k = 0; k < p->nIns; k++ )
             for ( i = 0; i < p2->nPats; i++ )
                 if ( Abc_RDataGetIn(p2, k, i) )
-                    Abc_InfoSetBit((unsigned *)Vec_WrdEntryP(vSimsDiv, i), 1+k);
+                    Abc_TtSetBit( Vec_WrdEntryP(vSimsDiv, i), 1+k );
         vSimsOut = Vec_WrdStart( p2->nPats );
         for ( k = 0; k < (1 << p->nOuts); k++ )
             for ( i = 0; i < p2->nPats; i++ )
                 if ( Abc_RDataGetOut(p2, k, i) )
-                    Abc_InfoSetBit((unsigned *)Vec_WrdEntryP(vSimsOut, i), k);
+                    Abc_TtSetBit( Vec_WrdEntryP(vSimsOut, i), k );
         Abc_RDataStop( p );
         Abc_RDataStop( p2 );       
     }
@@ -4620,6 +4654,7 @@ void Exa_NpnCascadeTest()
 //    for ( i = 0; i < 616126; i++ )
     {
         int Value = fscanf( pFile, "%s", Buffer );
+        (void)Value;
         assert( Value == 1 );
         if ( i == 0 ) continue;
         if ( Buffer[strlen(Buffer)-1] == '\n' )
@@ -4643,7 +4678,7 @@ void Exa_NpnCascadeTest6()
     for ( i = 0; i < 10000; i++ ) 
     {
         word Truth = Abc_RandomW(0);        
-        sprintf( Command, "lutexact -I 6 -N 2 -K 5 -gvc %016lx", Truth );
+        sprintf( Command, "lutexact -I 6 -N 2 -K 5 -gvc %016llx", (unsigned long long)Truth );
         printf( "\nIter %4d : Command \"%s\":\n", i, Command );
         if ( Cmd_CommandExecute( Abc_FrameGetGlobalFrame(), Command ) )
         {

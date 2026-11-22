@@ -317,7 +317,6 @@ static inline void act_var_rescale(sat_solver2* s)  {
     s->var_inc *= 1e-100;
 }
 static inline void act_clause2_rescale(sat_solver2* s) {
-    static abctime Total = 0;
     float * act_clas = (float *)veci_begin(&s->act_clas);
     int i;
     abctime clk = Abc_Clock();
@@ -325,9 +324,9 @@ static inline void act_clause2_rescale(sat_solver2* s) {
         act_clas[i] *= (float)1e-20;
     s->cla_inc *= (float)1e-20;
 
-    Total += Abc_Clock() - clk;
+    s->timeActRescale += Abc_Clock() - clk;
     Abc_Print(1, "Rescaling...   Cla inc = %10.3f  Conf = %10d   ", s->cla_inc,  s->stats.conflicts );
-    Abc_PrintTime( 1, "Time", Total );
+    Abc_PrintTime( 1, "Time", s->timeActRescale );
 }
 static inline void act_var_bump(sat_solver2* s, int v) {
     s->activity[v] += s->var_inc;
@@ -394,11 +393,12 @@ static inline void act_clause2_decay(sat_solver2* s) { s->cla_inc += (s->cla_inc
 
 static inline int sat_clause_compute_lbd( sat_solver2* s, clause* c )
 {
-    int i, lev, minl = 0, lbd = 0;
+    int i, lev, lbd = 0;
+    unsigned minl = 0;
     for (i = 0; i < (int)c->size; i++) {
         lev = var_level(s, lit_var(c->lits[i]));
-        if ( !(minl & (1 << (lev & 31))) ) {
-            minl |= 1 << (lev & 31);
+        if ( !(minl & (1u << (lev & 31))) ) {
+            minl |= 1u << (lev & 31);
             lbd++;
         }
     }
@@ -949,6 +949,7 @@ clause* solver2_propagate(sat_solver2* s)
                 {
                     int k, x, proof_id, Cid, Var = lit_var(Lit);
                     int fLitIsFalse = (var_value(s, Var) == !lit_sign(Lit));
+                    (void)fLitIsFalse;
                     // Log production of top-level unit clause:
                     proof_chain_start( s, c );
                     clause_foreach_var( c, x, k, 1 ){
@@ -1007,6 +1008,8 @@ static lbool solver2_search(sat_solver2* s, ABC_INT64_T nof_conflicts)
     veci    learnt_clause;
     int     proof_id;
 
+    unsigned nStopChecks = 0;
+
     assert(s->root_level == solver2_dlevel(s));
 
     s->stats.starts++;
@@ -1015,7 +1018,15 @@ static lbool solver2_search(sat_solver2* s, ABC_INT64_T nof_conflicts)
     veci_new(&learnt_clause);
 
     for (;;){
-        clause* confl = solver2_propagate(s);
+        clause* confl;
+        if ( s->pFuncStop && !(nStopChecks++ & 255) && s->pFuncStop(s->RunId) )
+        {
+            s->fStopRequested = 1;
+            solver2_canceluntil( s, s->root_level );
+            veci_delete( &learnt_clause );
+            return l_Undef;
+        }
+        confl = solver2_propagate(s);
         if (confl != 0){
             // CONFLICT
             int blevel;
@@ -1405,7 +1416,6 @@ void luby2_test()
 // updates clauses, watches, units, and proof
 void sat_solver2_reducedb(sat_solver2* s)
 {
-    static abctime TimeTotal = 0;
     Sat_Mem_t * pMem = &s->Mem;
     clause * c = NULL;
     int nLearnedOld = veci_size(&s->act_clas);
@@ -1414,8 +1424,6 @@ void sat_solver2_reducedb(sat_solver2* s)
     int i, j, k, Id, nSelected;//, LastSize = 0;
     int Counter, CounterStart;
     abctime clk = Abc_Clock();
-    static int Count = 0;
-    Count++;
     assert( s->nLearntMax );
     s->nDBreduces++;
 //    printf( "Calling reduceDB with %d clause limit and parameters (%d %d %d).\n", s->nLearntMax, s->nLearntStart, s->nLearntDelta, s->nLearntRatio );
@@ -1573,12 +1581,12 @@ void sat_solver2_reducedb(sat_solver2* s)
     }
 
     // report the results
-    TimeTotal += Abc_Clock() - clk;
+    s->timeReduceDb += Abc_Clock() - clk;
     if ( s->fVerbose )
     {
         Abc_Print(1, "reduceDB: Keeping %7d out of %7d clauses (%5.2f %%)  ",
             s->stats.learnts, nLearnedOld, 100.0 * s->stats.learnts / nLearnedOld );
-        Abc_PrintTime( 1, "Time", TimeTotal );
+        Abc_PrintTime( 1, "Time", s->timeReduceDb );
     }
 }
 
@@ -1587,8 +1595,6 @@ void sat_solver2_rollback( sat_solver2* s )
 {
     Sat_Mem_t * pMem = &s->Mem;
     int i, k, j;
-    static int Count = 0;
-    Count++;
     assert( s->iVarPivot >= 0 && s->iVarPivot <= s->size );
     assert( s->iTrailPivot >= 0 && s->iTrailPivot <= s->qtail );
     assert( s->pPrf1 == NULL || (s->hProofPivot >= 1 && s->hProofPivot <= Vec_SetHandCurrent(s->pPrf1)) );
@@ -1944,6 +1950,7 @@ int sat_solver2_solve(sat_solver2* s, lit* begin, lit* end, ABC_INT64_T nConfLim
         Abc_Print(1,"==============================================================================\n");
     }
 
+    s->fStopRequested = 0;
     while (status == l_Undef){
         if (s->verbosity >= 1)
         {
@@ -1967,6 +1974,8 @@ int sat_solver2_solve(sat_solver2* s, lit* begin, lit* end, ABC_INT64_T nConfLim
         nof_conflicts = (ABC_INT64_T)( 100 * luby2(2, restart_iter++) );
         status = solver2_search(s, nof_conflicts);
         // quit the loop if reached an external limit
+        if ( s->fStopRequested )
+            break;
         if ( s->nConfLimit && s->stats.conflicts > s->nConfLimit )
             break;
         if ( s->nInsLimit  && s->stats.propagations > s->nInsLimit )

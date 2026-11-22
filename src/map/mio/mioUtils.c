@@ -1381,7 +1381,7 @@ void Nf_ManPreparePrint( int nVars, int * pComp, int * pPerm, char Line[2*720*64
         {
             for ( c = 0; c < nMints; c++ )
             {
-                strcpy( Line[n+1], Line[n] ); n++;
+                memmove( Line[n+1], Line[n], (size_t)nVars + 2 ); n++;
                 pChar = &Line[n][pComp[c]];
                 if ( *pChar >= 'A' && *pChar <= 'Z' )
                     *pChar += 'a' - 'A';
@@ -1526,7 +1526,8 @@ void Mio_LibraryReadProfile( FILE * pFile, Mio_Library_t * pLib )
     char pBuffer[1000];
     while ( fgets( pBuffer, 1000, pFile ) != NULL )
     {
-        char * pToken = strtok( pBuffer, " \t\n" );
+        char * pSave = NULL;
+        char * pToken = Abc_UtilStrtok( pBuffer, " \t\n", &pSave );
         if ( pToken == NULL )
             continue;
         if ( pToken[0] == '#' )
@@ -1539,7 +1540,7 @@ void Mio_LibraryReadProfile( FILE * pFile, Mio_Library_t * pLib )
             continue;
         }
         // read profile
-        pToken = strtok( NULL, " \t\n" );
+        pToken = Abc_UtilStrtok( NULL, " \t\n", &pSave );
         Mio_GateSetProfile( pGate, atoi(pToken) );
     }
 }
@@ -1767,7 +1768,7 @@ void Mio_LibraryMatchesStop( Mio_Library_t * pLib )
 }
 void Mio_LibraryMatchesStart( Mio_Library_t * pLib, int fPinFilter, int fPinPerm, int fPinQuick )
 {
-    extern Mio_Cell2_t * Nf_StoDeriveMatches( Vec_Mem_t * vTtMem, Vec_Wec_t * vTt2Match, int * pnCells, int fPinFilter, int fPinPerm, int fPinQuick );
+    extern Mio_Cell2_t * Nf_StoDeriveMatches( Mio_Library_t * pLib, Vec_Mem_t * vTtMem, Vec_Wec_t * vTt2Match, int * pnCells, int fPinFilter, int fPinPerm, int fPinQuick );
     if ( pLib->vTtMem && pLib->fPinFilter == fPinFilter && pLib->fPinPerm == fPinPerm && pLib->fPinQuick == fPinQuick )
         return;
     if ( pLib->vTtMem )
@@ -1780,7 +1781,7 @@ void Mio_LibraryMatchesStart( Mio_Library_t * pLib, int fPinFilter, int fPinPerm
     Vec_WecPushLevel( pLib->vTt2Match );
     Vec_WecPushLevel( pLib->vTt2Match );
     assert( Vec_WecSize(pLib->vTt2Match) == Vec_MemEntryNum(pLib->vTtMem) );
-    pLib->pCells = Nf_StoDeriveMatches( pLib->vTtMem, pLib->vTt2Match, &pLib->nCells, fPinFilter, fPinPerm, fPinQuick );
+    pLib->pCells = Nf_StoDeriveMatches( pLib, pLib->vTtMem, pLib->vTt2Match, &pLib->nCells, fPinFilter, fPinPerm, fPinQuick );
 }
 void Mio_LibraryMatchesFetch( Mio_Library_t * pLib, Vec_Mem_t ** pvTtMem, Vec_Wec_t ** pvTt2Match, Mio_Cell2_t ** ppCells, int * pnCells, int fPinFilter, int fPinPerm, int fPinQuick )
 {
@@ -1848,4 +1849,3 @@ void Mio_LibraryMatches2Fetch( Mio_Library_t * pLib, Vec_Ptr_t ** pvNames, Vec_W
 
 
 ABC_NAMESPACE_IMPL_END
-

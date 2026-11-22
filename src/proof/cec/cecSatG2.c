@@ -1053,7 +1053,7 @@ void Cec4_ManPrintTfiConeStats( Gia_Man_t * p )
 }
 void Cec4_ManPrintStats( Gia_Man_t * p, Cec_ParFra_t * pPars, Cec4_Man_t * pMan, int fSim )
 {
-    static abctime clk = 0;
+    static ABC_THREAD_LOCAL abctime clk = 0;
     abctime clkThis = 0;
     int i, nLits, Counter = 0, Counter0 = 0, CounterX = 0;
     if ( !pPars->fVerbose )
@@ -2174,6 +2174,7 @@ Vec_Int_t * Cec4_ManComputeMapping( Gia_Man_t * p, Gia_Man_t * pAig, int fVerbos
         else
         {
             int iLitGia2 = Gia_ManObj(p, pAig2Abc[iReprGia] )->Value;
+            (void)iLitGia2;
             assert( Gia_ObjReprSelf(pAig, Abc_Lit2Var(iLitGia)) == Gia_ObjReprSelf(pAig, Abc_Lit2Var(iLitGia2)) );
             assert( i > pAig2Abc[iReprGia] );
             Vec_IntWriteEntry( vReprs, i, pAig2Abc[iReprGia] );
@@ -2193,6 +2194,7 @@ void Cec4_ManVerifyEquivs( Gia_Man_t * p, Vec_Int_t * vRes, int fVerbose )
     int i, iRepr, nWords = 4; word * pSim0, * pSim1;
     Vec_Wrd_t * vSimsCi = Vec_WrdStartRandom( Gia_ManCiNum(p) * nWords );
     int nObjs = Vec_WrdShiftOne( vSimsCi, nWords ), nFails = 0;
+    (void)nObjs;
     Vec_Wrd_t * vSims   = Gia_ManSimPatSimOut( p, vSimsCi, 0 );
     assert( Vec_IntSize(vRes) == Gia_ManObjNum(p) );
     assert( nObjs == Gia_ManCiNum(p) );
@@ -2309,7 +2311,7 @@ Vec_Str_t * encodeSOP(char * pSop, int nFanins, int nCubes){
     return vSop;
 
 }
-
+#ifdef ABC_USE_CUDD
 /**Function*************************************************************
 
   Synopsis    [Extract SOP.]
@@ -2549,7 +2551,7 @@ void Cec_DeriveSOPs( Gia_Man_t * p ){
     return;
 
 }
-
+#endif
 /**Function*************************************************************
 
   Synopsis    [Evaluate MFFC depth.]
@@ -2944,6 +2946,7 @@ void saveSimVectors( Gia_Man_t * p, Vec_Ptr_t * pValues, int bitLength, int jth_
 
     int i, Id;
     int nWords = bitLength / 64;
+    (void)nWords;
     assert(nWords == 0); // Not considering case with large outgold values
     Gia_ManForEachCiId( p, Id, i ){
         Vec_Wrd_t * pValuesPi = (Vec_Wrd_t *) Vec_PtrEntry( pValues, i );
@@ -3907,7 +3910,7 @@ void exportSimValues( Gia_Man_t * p, char * filename )
         word * pSim  = Cec4_ObjSim( p, i );
         fprintf( pFile, "Obj %d ", i );
         for(j = 0; j < p->nSimWords; j++){
-          fprintf( pFile, "[%d]: %lu ", j, pSim[j] );
+          fprintf( pFile, "[%d]: %llu ", j, (unsigned long long)pSim[j] );
         }
         fprintf(pFile, "\n");
     }
@@ -4344,6 +4347,7 @@ void printISOPLUT(Gia_Man_t * pMan, int ObjId){
 
 Gia_Man_t * Cec_SimGenRun( Gia_Man_t * p, Cec_ParSimGen_t * pPars ){
 
+#ifdef ABC_USE_CUDD
     extern void Gia_ManDupMapping( Gia_Man_t * pNew, Gia_Man_t * p );
     Cec4_Man_t * pManSim;  
     int i, k, nWordsPerCi;
@@ -4472,6 +4476,12 @@ Gia_Man_t * Cec_SimGenRun( Gia_Man_t * p, Cec_ParSimGen_t * pPars ){
     Gia_ManStop( pMapped );
 
     return p;
+#else
+    (void)p;
+    (void)pPars;
+    Abc_Print( -1, "&adv_sim_gen requires CUDD support.\n" );
+    return NULL;
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -4480,4 +4490,3 @@ Gia_Man_t * Cec_SimGenRun( Gia_Man_t * p, Cec_ParSimGen_t * pPars ){
 
 
 ABC_NAMESPACE_IMPL_END
-

@@ -313,7 +313,7 @@ void Io_WriteDotNtk( Abc_Ntk_t * pNtk, Vec_Ptr_t * vNodes, Vec_Ptr_t * vNodesSho
             }
             //if ( pNtk->vOrigNodeIds )
             //    printf( "%d = %d \n", pNode->Id, Vec_IntEntry(pNtk->vOrigNodeIds, pNode->Id) )
-            AigNodeId = (fAigIds && pNtk->vOrigNodeIds) ? Vec_IntEntry(pNtk->vOrigNodeIds, pNode->Id) : -1;
+            AigNodeId = (fAigIds && pNtk->vOrigNodeIds && pNode->Id < Vec_IntSize(pNtk->vOrigNodeIds)) ? Vec_IntEntry(pNtk->vOrigNodeIds, pNode->Id) : -1;
             if ( AigNodeId > 0 )
                 fprintf( pFile, "  Node%d [label = \"%s%d\\n%s\"", pNode->Id, Abc_LitIsCompl(AigNodeId) ? "-":"+", Abc_Lit2Var(AigNodeId), pSopString );
             else 
@@ -815,7 +815,7 @@ void Io_WriteDotSeq( Abc_Ntk_t * pNtk, Vec_Ptr_t * vNodes, Vec_Ptr_t * vNodesSho
 ***********************************************************************/
 char * Abc_NtkPrintSop( char * pSop ) 
 {
-    static char Buffer[1000];
+    static ABC_THREAD_LOCAL char Buffer[1000];
     char * pGet, * pSet;
     pSet = Buffer;
     for ( pGet = pSop; *pGet; pGet++ )
@@ -864,4 +864,3 @@ int Abc_NtkCountLogicNodes( Vec_Ptr_t * vNodes )
 
 
 ABC_NAMESPACE_IMPL_END
-

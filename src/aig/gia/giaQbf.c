@@ -1134,6 +1134,8 @@ Vec_Int_t * Gia_ManCollectNodeTfis( Gia_Man_t * p, Vec_Int_t * vNodes )
     Gia_ManForEachObjVec( vNodes, p, pObj, i )
         if ( Gia_ObjIsCo(pObj) )
             Gia_ObjSetTravIdCurrentId( p, Gia_ObjFaninId0p(p, pObj) );
+        else
+            Gia_ObjSetTravIdCurrent( p, pObj );
     Gia_ManForEachAndReverse( p, pObj, i ) {
         if ( !Gia_ObjIsTravIdCurrentId(p, i) )
             continue;        
@@ -1151,11 +1153,18 @@ Vec_Int_t * Gia_ManCollectNodeTfis( Gia_Man_t * p, Vec_Int_t * vNodes )
 Gia_Man_t * Gia_ManGenRelMiter( Gia_Man_t * pGia, Vec_Int_t * vInsOuts, int nIns )
 {
     Vec_Int_t * vTfo = Gia_ManCollectNodeTfos( pGia, Vec_IntEntryP(vInsOuts, nIns), Vec_IntSize(vInsOuts)-nIns );
-    Vec_Int_t * vTfi = Gia_ManCollectNodeTfis( pGia, vTfo );
+    Vec_Int_t * vRoots = Vec_IntDup( vTfo ), * vTfi;
     Vec_Int_t * vInLits  = Vec_IntAlloc( nIns );
     Vec_Int_t * vOutLits = Vec_IntAlloc( Vec_IntSize(vInsOuts) - nIns );
     Gia_Man_t * pNew, * pTemp; Gia_Obj_t * pObj; int i, iLit = 0;
+    // Boundary inputs can include divisors outside the affected PO cones.
+    // Build their logic too before exposing their values as miter outputs.
+    for ( i = 0; i < nIns; i++ )
+        Vec_IntPush( vRoots, Vec_IntEntry(vInsOuts, i) );
+    vTfi = Gia_ManCollectNodeTfis( pGia, vRoots );
+    Vec_IntFree( vRoots );
     Gia_ManFillValue( pGia );
+    Gia_ManConst0(pGia)->Value = 0;
     pNew = Gia_ManStart( 1000 );
     pNew->pName = Abc_UtilStrsav( pGia->pName );
     Gia_ManHashAlloc( pNew );
@@ -1209,6 +1218,7 @@ Vec_Int_t * Gia_ManGenIoCombs( Gia_Man_t * pGia, Vec_Int_t * vInsOuts, int nIns,
     sat_solver * pSat  = (sat_solver*)Cnf_DataWriteIntoSolver( pCnf, 1, 0 );
     int iLit = Abc_Var2Lit( 1, 0 ); // enumerating the care set (the miter output is 1)
     int status = sat_solver_addclause( pSat, &iLit, &iLit + 1 );  assert( status );
+    (void)status;
     Vec_Int_t * vSatVars = Vec_IntAlloc( Vec_IntSize(vInsOuts) );
     Vec_IntForEachEntry( vInsOuts, iNode, i )
         Vec_IntPush( vSatVars, i < nIns ? 2+i : pCnf->nVars-Vec_IntSize(vInsOuts)+i );
@@ -1283,4 +1293,3 @@ void Gia_ManGenRel( Gia_Man_t * pGia, Vec_Int_t * vInsOuts, int nIns, char * pFi
 
 
 ABC_NAMESPACE_IMPL_END
-

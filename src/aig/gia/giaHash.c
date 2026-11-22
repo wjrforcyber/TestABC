@@ -130,7 +130,8 @@ void Gia_ManHashStart( Gia_Man_t * p )
     Gia_ManForEachAnd( p, pObj, i )
     {
         pPlace = Gia_ManHashFind( p, Gia_ObjFaninLit0(pObj, i), Gia_ObjFaninLit1(pObj, i), Gia_ObjFaninLit2(p, i) );
-        assert( *pPlace == 0 );
+        // Mapped graphs may contain duplicates; keep them in the hash chain.
+        Vec_IntWriteEntry( &p->vHash, i, *pPlace );
         *pPlace = i;
     }
 }
@@ -181,7 +182,7 @@ void Gia_ManHashResize( Gia_Man_t * p )
             Gia_Obj_t * pThis0 = Gia_ManObj( p, iThis );
             Vec_IntWriteEntry( &p->vHash, iThis, 0 );
             pPlace = Gia_ManHashFind( p, Gia_ObjFaninLit0(pThis0, iThis), Gia_ObjFaninLit1(pThis0, iThis), Gia_ObjFaninLit2p(p, pThis0) );
-            assert( *pPlace == 0 ); // should not be there
+            Vec_IntWriteEntry( &p->vHash, iThis, *pPlace );
             *pPlace = iThis;
             assert( *pPlace != 0 );
             Counter++;
@@ -621,6 +622,28 @@ int Gia_ManHashAnd( Gia_Man_t * p, int iLit0, int iLit1 )
 int Gia_ManHashOr( Gia_Man_t * p, int iLit0, int iLit1 )  
 { 
     return Abc_LitNot(Gia_ManHashAnd( p, Abc_LitNot(iLit0), Abc_LitNot(iLit1) ));
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Look up a native XOR, returning -1 when absent.]
+
+***********************************************************************/
+// Lookup-only counterpart of Gia_ManHashXorReal; -1 means absent.
+// Descending, uncomplemented fanins distinguish XOR from AND in the table.
+int Gia_ManHashXorTry( Gia_Man_t * p, int iLit0, int iLit1 )
+{
+    int fCompl, * pPlace;
+    if ( iLit0 < 2 ) return Abc_LitNotCond(iLit1, iLit0);
+    if ( iLit1 < 2 ) return Abc_LitNotCond(iLit0, iLit1);
+    if ( iLit0 == iLit1 ) return 0;
+    if ( iLit0 == Abc_LitNot(iLit1) ) return 1;
+    fCompl = Abc_LitIsCompl(iLit0) ^ Abc_LitIsCompl(iLit1);
+    iLit0 = Abc_LitRegular(iLit0);
+    iLit1 = Abc_LitRegular(iLit1);
+    if ( iLit0 < iLit1 ) ABC_SWAP(int, iLit0, iLit1);
+    pPlace = Gia_ManHashFind(p, iLit0, iLit1, -1);
+    return *pPlace ? Abc_Var2Lit(*pPlace, fCompl) : -1;
 }
 
 /**Function*************************************************************

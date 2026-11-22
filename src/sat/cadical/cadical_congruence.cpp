@@ -2581,7 +2581,9 @@ void Closure::update_and_gate (Gate *g, GatesTable::iterator it, int src,
   bool garbage = true;
   if (g->arity () == 1 && internal->val (g->lhs) &&
       internal->val (g->lhs) == internal->val (g->rhs[0])) {
-    g->garbage = true;
+    // Backport the CaDiCaL 2.2.1 leak fix: also queue the gate for deletion.
+    // https://github.com/arminbiere/cadical/commit/19051795fdbf5766479381d668ce06edac9ffa88
+    mark_garbage (g);
     return;
   }
   if (falsifies || clashing) {
@@ -2978,6 +2980,8 @@ Gate *Closure::new_and_gate (Clause *base_clause, int lhs) {
       LOG ("found merged literals");
       ++internal->stats.congruence.ands;
     }
+    // This temporary gate was not inserted into the table that owns gates.
+    delete g;
     return nullptr;
   } else {
     g->rhs = {rhs};
@@ -7076,7 +7080,7 @@ Gate *Closure::new_ite_gate (int lhs, int cond, int then_lit, int else_lit,
   LOG ("ITE gate %d = %d ? %d : %d", lhs, cond, then_lit, else_lit);
 
   bool negate_lhs = false;
-  Gate *g = new Gate;
+  Gate *g = new Gate ();
   g->lhs = lhs;
   g->tag = Gate_Type::ITE_Gate;
   g->rhs = {rhs};

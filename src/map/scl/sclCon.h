@@ -56,8 +56,8 @@ struct Scl_Con_t_
 #define SCL_OUTPUT_REQ   "output_required"
 #define SCL_OUTPUT_LOAD  "output_load"
 
-#define SCL_DIRECTIVE(ITEM)     "."#ITEM
-#define SCL_DEF_DIRECTIVE(ITEM) ".default_"#ITEM
+#define SCL_DIRECTIVE(ITEM)     "." ITEM
+#define SCL_DEF_DIRECTIVE(ITEM) ".default_" ITEM
 
 #define SCL_NUM          1000
 #define SCL_INFINITY    (0x3FFFFFFF)
@@ -134,22 +134,23 @@ static inline void Scl_ConFree( Scl_Con_t * p )
 static inline int Scl_ConParse( Scl_Con_t * p, Abc_Nam_t * pNamI, Abc_Nam_t * pNamO )
 {
     char Buffer[1000];
-    char * pToken, * pToken2, * pToken3, * pName; 
+    char * pToken, * pToken2, * pToken3, * pName, * pSave;
     int i, Num = -1, nLines = 0; int Value;
     FILE * pFile = fopen( p->pFileName, "rb" );
     while ( fgets( Buffer, 1000, pFile ) )
     {
         nLines++;
-        pToken = strtok( Buffer, " \t\r\n" );
+        pSave = NULL;
+        pToken = Abc_UtilStrtok( Buffer, " \t\r\n", &pSave );
         if ( pToken == NULL )
             continue;
-        pToken2 = strtok( NULL, " \t\r\n" );
+        pToken2 = Abc_UtilStrtok( NULL, " \t\r\n", &pSave );
         if ( pToken2 == NULL )
         {
             printf( "Line %d: Skipping directive \"%s\" without argument.\n", nLines, pToken );
             continue;
         }
-        pToken3 = strtok( NULL, " \t\r\n" );
+        pToken3 = Abc_UtilStrtok( NULL, " \t\r\n", &pSave );
         if ( !strcmp(pToken, ".model") )                                p->pModelName  = Abc_UtilStrsav(pToken2);
         else if ( !strcmp(pToken, SCL_DEF_DIRECTIVE(SCL_INPUT_CELL)) )  p->pInCellDef  = Abc_UtilStrsav(pToken2);
         else if ( !strcmp(pToken, SCL_DEF_DIRECTIVE(SCL_INPUT_ARR))  )  p->tInArrDef   = Scl_Flt2Int(atof(pToken2));
@@ -290,4 +291,3 @@ ABC_NAMESPACE_HEADER_END
 ////////////////////////////////////////////////////////////////////////
 ///                       END OF FILE                                ///
 ////////////////////////////////////////////////////////////////////////
-

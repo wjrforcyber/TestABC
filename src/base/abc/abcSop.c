@@ -936,6 +936,13 @@ int Abc_SopCheckReadTruth( Vec_Ptr_t * vRes, char * pToken, int fHex )
         Vec_PtrShrink( vRes, 0 );
         return 0;
     }
+    if ( strspn(pToken, fHex ? "0123456789abcdefABCDEF" : "01") != strlen(pToken) )
+    {
+        printf( "String %s does not look like a %s representation of the truth table.\n", pToken, fHex ? "hexadecimal" : "binary" );
+        Vec_PtrFreeData( vRes );
+        Vec_PtrShrink( vRes, 0 );
+        return 0;
+    }
     if ( Vec_PtrSize(vRes) == 0 )
         return 1;
     pBase = (char *)Vec_PtrEntry( vRes, 0 );
@@ -1035,11 +1042,19 @@ Vec_Ptr_t * Abc_SopFromTruthsBin( char * pTruth )
     Vec_Ptr_t * vRes = Vec_PtrAlloc( 10 );
     char * pCopy = Abc_UtilStrsav(pTruth);
     char * pToken = strtok( pCopy, " \r\n\t|" );
+    char * pSop;
     while ( pToken )
     {
         if ( !Abc_SopCheckReadTruth( vRes, pToken, 0 ) )
             break;
-        Vec_PtrPush( vRes, Abc_SopFromTruthBin(pToken) );
+        pSop = Abc_SopFromTruthBin(pToken);
+        if ( pSop == NULL )
+        {
+            Vec_PtrFreeData( vRes );
+            Vec_PtrClear( vRes );
+            break;
+        }
+        Vec_PtrPush( vRes, pSop );
         pToken = strtok( NULL, " \r\n\t|" );
     }
     ABC_FREE( pCopy );    
@@ -1084,6 +1099,7 @@ char * Abc_SopFromTruthHex( char * pTruth )
             Digit = 10 + pTruth[i] - 'A';
         else
         {
+            Vec_IntFree( vMints );
             printf( "String %s does not look like a hexadecimal representation of the truth table.\n", pTruth );
             return NULL;
         }
@@ -1129,13 +1145,21 @@ Vec_Ptr_t * Abc_SopFromTruthsHex( char * pTruth )
     Vec_Ptr_t * vRes = Vec_PtrAlloc( 10 );
     char * pCopy = Abc_UtilStrsav(pTruth);
     char * pToken = strtok( pCopy, " \r\n\t|" );
+    char * pSop;
     while ( pToken )
     {
         if ( pToken[0] == '0' && pToken[1] == 'x' )
             pToken += 2;
         if ( !Abc_SopCheckReadTruth( vRes, pToken, 1 ) )
             break;
-        Vec_PtrPush( vRes, Abc_SopFromTruthHex(pToken) );
+        pSop = Abc_SopFromTruthHex(pToken);
+        if ( pSop == NULL )
+        {
+            Vec_PtrFreeData( vRes );
+            Vec_PtrClear( vRes );
+            break;
+        }
+        Vec_PtrPush( vRes, pSop );
         pToken = strtok( NULL, " \r\n\t|" );
     }
     ABC_FREE( pCopy );
@@ -1202,6 +1226,7 @@ char * Abc_SopEncoderLog( Mem_Flex_t * pMan, int iBit, int nValues )
     char * pResult;
     Vec_Str_t * vSop;
     int v, Counter, fFirst = 1, nBits = Abc_Base2Log(nValues);
+    (void)nBits;
     assert( iBit < nBits );
     // count the number of literals
     Counter = 0;
@@ -1470,4 +1495,3 @@ void Abc_SopToTruthBig( char * pSop, int nInputs, word ** pVars, word * pCube, w
 
 
 ABC_NAMESPACE_IMPL_END
-

@@ -366,6 +366,8 @@ void Aig_MmFlexStop( Aig_MmFlex_t * p, int fVerbose )
 char * Aig_MmFlexEntryFetch( Aig_MmFlex_t * p, int nBytes )
 {
     char * pTemp;
+    // Mixed strings and records must preserve alignment of pointers and words.
+    nBytes = (nBytes + 7) & ~7;
 #ifdef ABC_MEMALIGN
     // extend size to max alignment
     nBytes += (ABC_MEMALIGN - nBytes % ABC_MEMALIGN) % ABC_MEMALIGN;
@@ -473,6 +475,8 @@ Aig_MmStep_t * Aig_MmStepStart( int nSteps )
 {
     Aig_MmStep_t * p;
     int i, k;
+    assert( nSteps > 0 && nSteps <= 28 );
+    if ( nSteps <= 0 || nSteps > 28 ) abort();
     p = ABC_ALLOC( Aig_MmStep_t, 1 );
     memset( p, 0, sizeof(Aig_MmStep_t) );
     p->nMems = nSteps;
@@ -607,4 +611,3 @@ int Aig_MmStepReadMemUsage( Aig_MmStep_t * p )
 ///                       END OF FILE                                ///
 ////////////////////////////////////////////////////////////////////////
 ABC_NAMESPACE_IMPL_END
-

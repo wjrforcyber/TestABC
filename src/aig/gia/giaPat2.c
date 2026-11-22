@@ -19,6 +19,7 @@
 ***********************************************************************/
 
 #include "gia.h"
+#include "misc/extra/extra.h"
 #include "misc/vec/vecHsh.h"
 #include "sat/cnf/cnf.h"
 #include "sat/bsat/satStore.h"
@@ -1391,6 +1392,8 @@ void Gia_GenerateCexesDumpBlif( char * pFileName, Gia_Man_t * p, Vec_Wec_t * vCe
         p->vNamesIn = Gia_GetFakeNames( Gia_ManCiNum(p), 0 ), fFakeIns = 1;
     if ( p->vNamesOut == NULL )
         p->vNamesOut = Gia_GetFakeNames( Gia_ManCoNum(p), 1 ), fFakeOuts = 1;
+    if ( p->vNamesIn == NULL || p->vNamesOut == NULL )
+        abort();
 
     Gia_Obj_t * pObj, * pObj2; 
     char * pLine = ABC_CALLOC( char, Gia_ManCiNum(p)+3 );
@@ -1399,10 +1402,10 @@ void Gia_GenerateCexesDumpBlif( char * pFileName, Gia_Man_t * p, Vec_Wec_t * vCe
     fprintf( pFile, ".model %s\n", p->pName );
     fprintf( pFile, ".inputs" );
     Gia_ManForEachCi( p, pObj, i )
-        fprintf( pFile, " %s", Gia_ObjCiName(p, i) );
+        fprintf( pFile, " %s", (char *)Vec_PtrEntry(p->vNamesIn, i) );
     fprintf( pFile, "\n.outputs" );
     Gia_ManForEachCo( p, pObj, i )
-        fprintf( pFile, " %s", Gia_ObjCoName(p, i) );
+        fprintf( pFile, " %s", (char *)Vec_PtrEntry(p->vNamesOut, i) );
     fprintf( pFile, "\n" );
     Gia_ManForEachCo( p, pObj, i ) {
         if ( Gia_ObjFaninLit0p(p, pObj) == 0 ) {
@@ -1410,13 +1413,13 @@ void Gia_GenerateCexesDumpBlif( char * pFileName, Gia_Man_t * p, Vec_Wec_t * vCe
             nOuts[0]++;
         }
         else if ( Gia_ObjFaninLit0p(p, pObj) == 1 ) {
-            fprintf( pFile, ".names %s\n 1\n", Gia_ObjCiName(p, i) );
+            fprintf( pFile, ".names %s\n 1\n", Gia_ObjCoName(p, i) );
             nOuts[1]++;
         }
         else {
             fprintf( pFile, ".names" );
             Gia_ManForEachCi( p, pObj2, c )
-                fprintf( pFile, " %s", Gia_ObjCiName(p, c) );
+                fprintf( pFile, " %s", (char *)Vec_PtrEntry(p->vNamesIn, c) );
             fprintf( pFile, " %s\n", Gia_ObjCoName(p, i) );
             for ( c = 0; c < nCexes; c++ ) {
                 Vec_Int_t * vPat = Vec_WecEntry( vCexes, i*nCexes+c );
@@ -1503,4 +1506,3 @@ void Gia_GenerateCexes( char * pFileName, Gia_Man_t * p, int nMaxTries, int nMin
 
 
 ABC_NAMESPACE_IMPL_END
-

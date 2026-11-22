@@ -154,6 +154,7 @@ struct If_Par_t_
     int                fDumpFile;     // dumping truth tables into a file
     int                fVerbose;      // the verbosity flag
     int                fVerboseTrace; // the verbosity flag
+    int                fNoDelayWarn;  // suppress unmet delay-target warnings
     char *             pLutStruct;    // LUT structure
     int                fEnableStructN;// LUT structure using a new method
     float              WireDelay;     // wire delay
@@ -690,6 +691,8 @@ extern int *           If_CutArrTimeProfile( If_Man_t * p, If_Cut_t * pCut );
 extern void            If_ObjPerformMappingAnd( If_Man_t * p, If_Obj_t * pObj, int Mode, int fPreprocess, int fFirst );
 extern void            If_ObjPerformMappingChoice( If_Man_t * p, If_Obj_t * pObj, int Mode, int fPreprocess );
 extern int             If_ManPerformMappingRound( If_Man_t * p, int nCutsUsed, int Mode, int fPreprocess, int fFirst, char * pLabel );
+extern int             If_ManPerformMappingRoundTimed( If_Man_t * p, int nCutsUsed, int Mode, int fPreprocess, int fFirst, char * pLabel, abctime Deadline );
+extern int             If_ManPerformMappingTimed( If_Man_t * p, abctime Deadline );
 /*=== ifReduce.c ==========================================================*/
 extern void            If_ManImproveMapping( If_Man_t * p );
 /*=== ifSat.c ==========================================================*/

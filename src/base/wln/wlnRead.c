@@ -1904,7 +1904,7 @@ void Rtl_NtkBlastOperator( Gia_Man_t * pNew, Rtl_Ntk_t * p, int * pCell )
 }
 char * Rtl_ShortenName( char * pName, int nSize )
 {
-    static char Buffer[1000];
+    static ABC_THREAD_LOCAL char Buffer[1000];
     if ( (int)strlen(pName) <= nSize )
         return pName;
     Buffer[0] = 0;
@@ -2787,21 +2787,52 @@ int Rtl_LibReturnNtk( Rtl_Lib_t * p, char * pModule )
     }
     return iNtk;
 }
+static int Rtl_NtkCheckComb_rec( Rtl_Ntk_t * p )
+{
+    int i, * pCell;
+    if ( p->iCopy == 0 )
+        return 1;
+    p->iCopy = 0;
+    Rtl_NtkForEachCell( p, pCell, i )
+    {
+        Rtl_Ntk_t * pMod = Rtl_CellNtk( p, pCell );
+        if ( Rtl_CellModule(pCell) == ABC_OPER_DFF )
+        {
+            printf( "Sequential designs are not supported by %%collapse (cell %s in module %s).\n", Rtl_CellNameStr(p, pCell), Rtl_NtkName(p) );
+            return 0;
+        }
+        if ( pMod && !Rtl_NtkCheckComb_rec(pMod) )
+            return 0;
+    }
+    return 1;
+}
 Gia_Man_t * Rtl_LibCollapse( Rtl_Lib_t * p, char * pTopModule, int fRev, int fVerbose )
 {
     Gia_Man_t * pGia = NULL;
-    int NameId = Wln_ReadFindToken( pTopModule, p->pManName );
+    char * pName = Abc_UtilStrsavTwo( "\\", pTopModule );
+    int NameId = Abc_NamStrFind( p->pManName, pName );
     int iNtk   = NameId ? Rtl_LibFindModule( p, NameId ) : -1;
+    ABC_FREE( pName );
     if ( iNtk == -1 )
     {
-        printf( "Cannot find top module \"%s\".\n", pTopModule );
+        printf( "Cannot find top module \"%s\".\n", pTopModule ? pTopModule : "" );
         return NULL;
     }
     else
     {
         abctime clk = Abc_Clock(); 
         Rtl_Ntk_t * pTop = Rtl_LibNtk(p, iNtk);
-        Vec_Int_t * vRoots = Vec_IntAlloc( 1 );
+        Rtl_Ntk_t * pNtk;
+        Vec_Int_t * vRoots;
+        int i, fComb;
+        Vec_PtrForEachEntry( Rtl_Ntk_t *, p->vNtks, pNtk, i )
+            pNtk->iCopy = -1;
+        fComb = Rtl_NtkCheckComb_rec( pTop );
+        Vec_PtrForEachEntry( Rtl_Ntk_t *, p->vNtks, pNtk, i )
+            pNtk->iCopy = -1;
+        if ( !fComb )
+            return NULL;
+        vRoots = Vec_IntAlloc( 1 );
         Vec_IntPush( vRoots, iNtk );
         Rtl_LibBlast2( p, vRoots, 1 );
         pGia = Gia_ManDup( pTop->pGia );
@@ -2945,4 +2976,3 @@ void Wln_LibMarkHierarchy( Rtl_Lib_t * p, char ** ppModule, int nModules, int fV
 
 
 ABC_NAMESPACE_IMPL_END
-

@@ -12,6 +12,7 @@
 #include "rrrParameter.h"
 #include "rrrUtils.h"
 #include "rrrAbc.h"
+#include "misc/util/abc_io.h"
 
 ABC_NAMESPACE_CXX_HEADER_START
 
@@ -42,6 +43,7 @@ namespace rrr {
     bool fOptOnInsert;
     seconds nTimeout;
     std::function<double(Ntk *)> CostFunction;
+    Abc_Frame_t *pFrame;
     
     // data
     int nCreatedJobs;
@@ -191,6 +193,7 @@ namespace rrr {
 
   template <typename Ntk, typename Opt, typename Par>
   inline void Scheduler<Ntk, Opt, Par>::CallAbc(Ntk *pNtk_, std::string Command) {
+    assert(pFrame != NULL);
 #ifdef ABC_USE_PTHREADS
     if(fMultiThreading) {
       {
@@ -392,6 +395,7 @@ namespace rrr {
 #ifdef ABC_USE_PTHREADS
   template <typename Ntk, typename Opt, typename Par>
   void Scheduler<Ntk, Opt, Par>::Thread(Parameter const *pPar) {
+    Abc_Frame_t *pPrevious = pFrame ? Abc_FrameEnter(pFrame) : NULL;
     Opt opt(pPar, CostFunction);
     while(true) {
       Job *pJob = NULL;
@@ -402,6 +406,9 @@ namespace rrr {
         }
         if(fTerminate) {
           assert(qPendingJobs.empty());
+          if(pFrame) {
+            Abc_FrameLeave(pPrevious);
+          }
           return;
         }
         pJob = qPendingJobs.front();
@@ -457,6 +464,7 @@ namespace rrr {
     nParallelPartitions(pPar->nParallelPartitions),
     fOptOnInsert(pPar->fOptOnInsert),
     nTimeout(pPar->nTimeout),
+    pFrame(Abc_FrameReadGlobalFrame()),
     nCreatedJobs(0),
     nFinishedJobs(0),
     par(pPar),
@@ -473,8 +481,12 @@ namespace rrr {
     fTerminate = false;
     if(fMultiThreading) {
       vThreads.reserve(pPar->nThreads);
+      FILE *out = Abc_IoReadOut(), *err = Abc_IoReadErr();
       for(int i = 0; i < pPar->nThreads; i++) {
-        vThreads.emplace_back(std::bind(&Scheduler::Thread, this, pPar));
+        vThreads.emplace_back([this, pPar, out, err]() {
+          Abc_IoSetWorkerStreams(out, err);
+          Thread(pPar);
+        });
       }
       return;
     }

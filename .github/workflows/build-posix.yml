@@ -44,6 +44,11 @@ jobs:
       run: |
         ./abc -c "r i10.aig; b; ps; b; rw -l; rw -lz; b; rw -lz; b; ps; cec"
 
+    - name: Test Mapping Regression
+      run: |
+        test/mf_maprefs_overflow.sh
+        test/sopb_shared_leaf.sh
+
     - name: Build Library
       run: |
         make -j3 ${MAKE_ARGS} libabc.a

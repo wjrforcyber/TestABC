@@ -120,6 +120,10 @@ struct sat_solver2_t
     int             nLearntDelta;   // delta of learned clause limit
     int             nLearntRatio;   // ratio percentage of learned clauses
     int             nDBreduces;     // number of DB reductions
+#ifdef USE_FLOAT_ACTIVITY2
+    abctime         timeActRescale; // runtime of clause activity rescaling
+#endif
+    abctime         timeReduceDb;   // runtime of DB reductions
     int             fNotUseRandom;  // do not allow random decisions with a fixed probability
     int             fSkipSimplify;  // set to one to skip simplification of the clause database
     int             fProofLogging;  // enable proof-logging
@@ -173,6 +177,9 @@ struct sat_solver2_t
     ABC_INT64_T     nConfLimit;     // external limit on the number of conflicts
     ABC_INT64_T     nInsLimit;      // external limit on the number of implications
     abctime         nRuntimeLimit;  // external limit on runtime
+    int             (*pFuncStop)(int); // optional cooperative stop callback
+    int             RunId;          // callback argument
+    int             fStopRequested; // latched for the current solve call
 };
 
 static inline clause * clause2_read( sat_solver2 * s, cla h )                  { return Sat_MemClauseHand( &s->Mem, h ); }

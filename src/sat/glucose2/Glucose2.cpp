@@ -398,10 +398,10 @@ bool Solver::satisfied(const Clause& c) const {
     return (value(c[0]) == l_True) || (value(c[1]) == l_True);
 
   // Default mode.
-    for (int i = 0; i < c.size(); i++)
-        if (value(c[i]) == l_True)
-            return true;
-    return false; 
+  for (int i = 0; i < c.size(); i++)
+    if (value(c[i]) == l_True)
+      return true;
+  return false;
 }
 
 /************************************************************
@@ -1368,16 +1368,16 @@ double Solver::progressEstimate() const
 void Solver::printIncrementalStats() {
 
   printf("c---------- Glucose Stats -------------------------\n");
-  printf("c restarts              : %ld\n", starts);
-  printf("c nb ReduceDB           : %ld\n", nbReduceDB);
-  printf("c nb removed Clauses    : %ld\n", nbRemovedClauses);
-  printf("c nb learnts DL2        : %ld\n", nbDL2);
-  printf("c nb learnts size 2     : %ld\n", nbBin);
-  printf("c nb learnts size 1     : %ld\n", nbUn);
+  printf("c restarts              : %lld\n", (long long)starts);
+  printf("c nb ReduceDB           : %lld\n", (long long)nbReduceDB);
+  printf("c nb removed Clauses    : %lld\n", (long long)nbRemovedClauses);
+  printf("c nb learnts DL2        : %lld\n", (long long)nbDL2);
+  printf("c nb learnts size 2     : %lld\n", (long long)nbBin);
+  printf("c nb learnts size 1     : %lld\n", (long long)nbUn);
 
-  printf("c conflicts             : %ld\n", conflicts);
-  printf("c decisions             : %ld\n", decisions);
-  printf("c propagations          : %ld\n", propagations);
+  printf("c conflicts             : %lld\n", (long long)conflicts);
+  printf("c decisions             : %lld\n", (long long)decisions);
+  printf("c propagations          : %lld\n", (long long)propagations);
 
   printf("c SAT Calls             : %d in %g seconds\n", nbSatCalls,   totalTime4Sat);
   printf("c UNSAT Calls           : %d in %g seconds\n", nbUnsatCalls, totalTime4Unsat);
@@ -1504,6 +1504,7 @@ printf("c ==================================[ Search Statistics (every %6d confl
         }
         
         int callback_result = pCnfFunc(pCnfMan, message, pCex);
+        (void)callback_result;
         assert(callback_result == 0);
     }
     else if (pCnfFunc)

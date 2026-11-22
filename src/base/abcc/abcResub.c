@@ -1,0 +1,3135 @@
+/**CFile****************************************************************
+
+  FileName    [abcResub.c]
+
+  SystemName  [ABC: Logic synthesis and verification system.]
+
+  PackageName [ABC command integration.]
+
+  Synopsis    [Resubstitution and window optimization.]
+
+  Author      [Alan Mishchenko]
+
+  Affiliation [UC Berkeley]
+
+  Date        [Ver. 1.0. Started - October 27, 2026.]
+
+***********************************************************************/
+
+#include "abcc.h"
+#include "base/main/mainInt.h"
+#include "aig/gia/giaAig.h"
+#include "opt/mfs/mfs.h"
+#include "opt/sfm/sfm.h"
+#include "opt/res/res.h"
+#include "opt/sbd/sbd.h"
+#include "opt/eslim/eSLIM.h"
+#include "opt/eslim2/eSLIM2.h"
+#include "aig/gia/giaEdit.h"
+#include <errno.h>
+#include <limits.h>
+
+ABC_NAMESPACE_IMPL_START
+
+////////////////////////////////////////////////////////////////////////
+///                           DECLARATIONS                           ///
+////////////////////////////////////////////////////////////////////////
+
+//static int Abc_CommandImfs                   ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandMfs                    ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandMfs2                   ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandResubstitute           ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandResubUnate             ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandResubCore              ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandResubCheck             ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandAbc9SimRsb             ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandAbc9Resub              ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandAbc9Mfs                ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandAbc9Mfs3               ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandAbc9Mfsd               ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandAbc9eSLIM              ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandAbc9eSLIM2             ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandAbc9elSLIM             ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandAbc9elSLIM2            ( Abc_Frame_t * pAbc, int argc, char ** argv );
+
+extern Abc_Ntk_t * Abc_NtkFromAigPhase( Aig_Man_t * pMan );
+
+/**Function*************************************************************
+
+  Synopsis    [Registers resubstitution and window optimization commands.]
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+void Abc_InitResub( Abc_Frame_t * pAbc )
+{
+//    Cmd_CommandAdd( pAbc, "Synthesis",    "imfs",          Abc_CommandImfs,             1 );
+    Cmd_CommandAdd( pAbc, "Synthesis",    "mfs",           Abc_CommandMfs,              1 );
+    Cmd_CommandAdd( pAbc, "Synthesis",    "mfs2",          Abc_CommandMfs2,             1 );
+    Cmd_CommandAdd( pAbc, "Synthesis",    "resub",         Abc_CommandResubstitute,     1 );
+    Cmd_CommandAdd( pAbc, "Synthesis",    "resub_unate",   Abc_CommandResubUnate,       1 );
+    Cmd_CommandAdd( pAbc, "Synthesis",    "resub_core",    Abc_CommandResubCore,        1 );
+    Cmd_CommandAdd( pAbc, "Synthesis",    "resub_check",   Abc_CommandResubCheck,       0 );
+    Cmd_CommandAdd( pAbc, "ABC9",         "&simrsb",       Abc_CommandAbc9SimRsb,       0 );
+    Cmd_CommandAdd( pAbc, "ABC9",         "&resub",        Abc_CommandAbc9Resub,        0 );
+    Cmd_CommandAdd( pAbc, "ABC9",         "&mfs",          Abc_CommandAbc9Mfs,          0 );
+    Cmd_CommandAdd( pAbc, "ABC9",         "&mfs3",         Abc_CommandAbc9Mfs3,         0 );
+    Cmd_CommandAdd( pAbc, "ABC9",         "&mfs2",         Abc_CommandAbc9Mfsd,         0 );
+    Cmd_CommandAdd( pAbc, "ABC9",         "&eslim",        Abc_CommandAbc9eSLIM,                  0 );
+    Cmd_CommandAdd( pAbc, "ABC9",         "&eslim2",       Abc_CommandAbc9eSLIM2,                 0 );
+    Cmd_CommandAdd( pAbc, "Synthesis",    "elslim",        Abc_CommandAbc9elSLIM,                 1 );
+    Cmd_CommandAdd( pAbc, "Synthesis",    "elslim2",       Abc_CommandAbc9elSLIM2,                1 );
+}
+
+////////////////////////////////////////////////////////////////////////
+///                       FUNCTION DEFINITIONS                       ///
+////////////////////////////////////////////////////////////////////////
+
+#if 0
+/**Function*************************************************************
+
+  Synopsis    []
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandImfs( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc);
+    Res_Par_t Pars, * pPars = &Pars;
+    int c;
+
+    // set defaults
+    pPars->nWindow      = 62;
+    pPars->nCands       =  5;
+    pPars->nSimWords    =  4;
+    pPars->nGrowthLevel =  0;
+    pPars->fArea        =  0;
+    pPars->fVerbose     =  0;
+    pPars->fVeryVerbose =  0;
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "WSCLavwh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'W':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-W\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nWindow = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nWindow < 1 || pPars->nWindow > 99 )
+                goto usage;
+            break;
+        case 'S':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-S\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nSimWords = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nSimWords < 1 || pPars->nSimWords > 256 )
+                goto usage;
+            break;
+        case 'C':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-C\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nCands = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nCands < 0 || pPars->nCands > ABC_INFINITY )
+                goto usage;
+            break;
+        case 'L':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-L\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nGrowthLevel = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nGrowthLevel < 0 || pPars->nGrowthLevel > ABC_INFINITY )
+                goto usage;
+            break;
+        case 'a':
+            pPars->fArea ^= 1;
+            break;
+        case 'v':
+            pPars->fVerbose ^= 1;
+            break;
+        case 'w':
+            pPars->fVeryVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+    if ( !Abc_NtkIsLogic(pNtk) )
+    {
+        Abc_Print( -1, "This command can only be applied to a logic network.\n" );
+        return 1;
+    }
+
+    // modify the current network
+    if ( !Abc_NtkResynthesize( pNtk, pPars ) )
+    {
+        Abc_Print( -1, "Resynthesis has failed.\n" );
+        return 1;
+    }
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: imfs [-W <NM>] [-LCS <num>] [-avwh]\n" );
+    Abc_Print( -2, "\t           performs resubstitution-based resynthesis with interpolation\n" );
+    Abc_Print( -2, "\t           (there is another command for resynthesis after LUT mapping, \"lutpack\")\n" );
+    Abc_Print( -2, "\t-W <NM>  : fanin/fanout levels (NxM) of the window (00 <= NM <= 99) [default = %d%d]\n", pPars->nWindow/10, pPars->nWindow%10 );
+    Abc_Print( -2, "\t-C <num> : the max number of resub candidates (1 <= n) [default = %d]\n", pPars->nCands );
+    Abc_Print( -2, "\t-S <num> : the number of simulation words (1 <= n <= 256) [default = %d]\n", pPars->nSimWords );
+    Abc_Print( -2, "\t-L <num> : the max increase in node level after resynthesis (0 <= num) [default = %d]\n", pPars->nGrowthLevel );
+    Abc_Print( -2, "\t-a       : toggle optimization for area only [default = %s]\n", pPars->fArea? "yes": "no" );
+    Abc_Print( -2, "\t-v       : toggle verbose printout [default = %s]\n", pPars->fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-w       : toggle printout subgraph statistics [default = %s]\n", pPars->fVeryVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    return 1;
+}
+#endif
+
+/**Function*************************************************************
+
+  Synopsis    []
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandMfs( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc);
+    Mfs_Par_t Pars, * pPars = &Pars;
+    int c;
+    // set defaults
+    Abc_NtkMfsParsDefault( pPars );
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "WFDMLCdraestpgcvwh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'W':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-W\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nWinTfoLevs = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nWinTfoLevs < 0 )
+                goto usage;
+            break;
+        case 'F':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-F\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nFanoutsMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nFanoutsMax < 0 )
+                goto usage;
+            break;
+        case 'D':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-D\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nDepthMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nDepthMax < 0 )
+                goto usage;
+            break;
+        case 'M':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-M\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nWinMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nWinMax < 0 )
+                goto usage;
+            break;
+        case 'L':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-L\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nGrowthLevel = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nGrowthLevel < 0 || pPars->nGrowthLevel > ABC_INFINITY )
+                goto usage;
+            break;
+        case 'C':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-C\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nBTLimit = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nBTLimit < 0 )
+                goto usage;
+            break;
+        case 'd':
+            pPars->fRrOnly ^= 1;
+            break;
+        case 'r':
+            pPars->fResub ^= 1;
+            break;
+        case 'a':
+            pPars->fArea ^= 1;
+            break;
+        case 'e':
+            pPars->fMoreEffort ^= 1;
+            break;
+        case 's':
+            pPars->fSwapEdge ^= 1;
+            break;
+        case 't':
+            pPars->fOneHotness ^= 1;
+            break;
+        case 'p':
+            pPars->fPower ^= 1;
+            break;
+        case 'g':
+            pPars->fGiaSat ^= 1;
+            break;
+        case 'c':
+            pPars->fPrintCares ^= 1;
+            break;
+        case 'v':
+            pPars->fVerbose ^= 1;
+            break;
+        case 'w':
+            pPars->fVeryVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+    if ( !Abc_NtkIsLogic(pNtk) )
+    {
+        Abc_Print( -1, "This command can only be applied to a logic network.\n" );
+        return 1;
+    }
+
+    // modify the current network
+    if ( !Abc_NtkMfs( pNtk, pPars ) )
+    {
+        Abc_Print( -1, "Resynthesis has failed.\n" );
+        return 1;
+    }
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: mfs [-WFDMLC <num>] [-draestpgcvh]\n" );
+    Abc_Print( -2, "\t           performs don't-care-based optimization of logic networks\n" );
+    Abc_Print( -2, "\t-W <num> : the number of levels in the TFO cone (0 <= num) [default = %d]\n", pPars->nWinTfoLevs );
+    Abc_Print( -2, "\t-F <num> : the max number of fanouts to skip (1 <= num) [default = %d]\n", pPars->nFanoutsMax );
+    Abc_Print( -2, "\t-D <num> : the max depth nodes to try (0 = no limit) [default = %d]\n", pPars->nDepthMax );
+    Abc_Print( -2, "\t-M <num> : the max node count of windows to consider (0 = no limit) [default = %d]\n", pPars->nWinMax );
+    Abc_Print( -2, "\t-L <num> : the max increase in node level after resynthesis (0 <= num) [default = %d]\n", pPars->nGrowthLevel );
+    Abc_Print( -2, "\t-C <num> : the max number of conflicts in one SAT run (0 = no limit) [default = %d]\n", pPars->nBTLimit );
+    Abc_Print( -2, "\t-d       : toggle performing redundancy removal [default = %s]\n", pPars->fRrOnly? "yes": "no" );
+    Abc_Print( -2, "\t-r       : toggle resubstitution and dc-minimization [default = %s]\n", pPars->fResub? "resub": "dc-min" );
+    Abc_Print( -2, "\t-a       : toggle minimizing area or area+edges [default = %s]\n", pPars->fArea? "area": "area+edges" );
+    Abc_Print( -2, "\t-e       : toggle high-effort resubstitution [default = %s]\n", pPars->fMoreEffort? "yes": "no" );
+    Abc_Print( -2, "\t-s       : toggle evaluation of edge swapping [default = %s]\n", pPars->fSwapEdge? "yes": "no" );
+    Abc_Print( -2, "\t-t       : toggle using artificial one-hotness conditions [default = %s]\n", pPars->fOneHotness? "yes": "no" );
+    Abc_Print( -2, "\t-p       : toggle power-aware optimization [default = %s]\n", pPars->fPower? "yes": "no" );
+    Abc_Print( -2, "\t-g       : toggle using new SAT solver [default = %s]\n", pPars->fGiaSat? "yes": "no" );
+    Abc_Print( -2, "\t-c       : toggle printing careset at each node [default = %s]\n", pPars->fPrintCares? "yes": "no" );
+    Abc_Print( -2, "\t-v       : toggle printing optimization summary [default = %s]\n", pPars->fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-w       : toggle printing detailed stats for each node [default = %s]\n", pPars->fVeryVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    []
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandMfs2( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    extern int Abc_NtkPerformMfs( Abc_Ntk_t * pNtk, Sfm_Par_t * pPars );
+    extern int Abc_NtkMfsAfterICheck( Abc_Ntk_t * p, int nFrames, int nFramesAdd, Vec_Int_t * vFlops, Sfm_Par_t * pPars );
+    Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc);
+    Sfm_Par_t Pars, * pPars = &Pars;
+    int c, fIndDCs = 0, fUseAllFfs = 0, nFramesAdd = 0;
+    // set defaults
+    Sfm_ParSetDefault( pPars );
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "WFDMLCZNIdaeijlvwh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'W':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-W\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nTfoLevMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nTfoLevMax < 0 )
+                goto usage;
+            break;
+        case 'F':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-F\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nFanoutMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nFanoutMax < 0 )
+                goto usage;
+            break;
+        case 'D':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-D\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nDepthMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nDepthMax < 0 )
+                goto usage;
+            break;
+        case 'M':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-M\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nWinSizeMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nWinSizeMax < 0 )
+                goto usage;
+            break;
+        case 'L':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-L\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nGrowthLevel = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nGrowthLevel < -ABC_INFINITY || pPars->nGrowthLevel > ABC_INFINITY )
+                goto usage;
+            break;
+        case 'C':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-C\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nBTLimit = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nBTLimit < 0 )
+                goto usage;
+            break;
+        case 'Z':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-Z\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nFirstFixed = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nFirstFixed < 0 )
+                goto usage;
+            break;
+        case 'N':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-N\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nNodesMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nNodesMax < 0 )
+                goto usage;
+            break;
+        case 'I':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-I\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nFramesAdd = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nFramesAdd < 0 )
+                goto usage;
+            break;
+        case 'd':
+            pPars->fRrOnly ^= 1;
+            break;
+        case 'a':
+            pPars->fArea ^= 1;
+            break;
+        case 'e':
+            pPars->fMoreEffort ^= 1;
+            break;
+        case 'i':
+            fIndDCs ^= 1;
+            break;
+        case 'j':
+            fUseAllFfs ^= 1;
+            break;
+        case 'l':
+            pPars->fUseDcs ^= 1;
+            break;
+        case 'v':
+            pPars->fVerbose ^= 1;
+            break;
+        case 'w':
+            pPars->fVeryVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+    if ( !Abc_NtkIsLogic(pNtk) )
+    {
+        Abc_Print( -1, "This command can only be applied to a logic network.\n" );
+        return 1;
+    }
+    if ( fIndDCs )
+    {
+        if ( fUseAllFfs )
+        {
+            pAbc->nIndFrames = 1;
+            Vec_IntFreeP( &pAbc->vIndFlops );
+            pAbc->vIndFlops = Vec_IntAlloc( Abc_NtkLatchNum(pNtk) );
+            Vec_IntFill( pAbc->vIndFlops, Abc_NtkLatchNum(pNtk), 1 );
+        }
+        if ( pAbc->nIndFrames <= 0 )
+        {
+            Abc_Print( -1, "The number of k-inductive frames is not specified.\n" );
+            return 0;
+        }
+        if ( pAbc->vIndFlops == NULL )
+        {
+            Abc_Print( -1, "The set of k-inductive flops is not specified.\n" );
+            return 0;
+        }
+        if ( Vec_IntSize(pAbc->vIndFlops) != Abc_NtkLatchNum(pNtk) )
+        {
+            Abc_Print( -1, "The saved flop count (%d) does not match that of the current network (%d).\n",
+                Vec_IntSize(pAbc->vIndFlops), Abc_NtkLatchNum(pNtk) );
+            return 0;
+        }
+        // modify the current network
+        if ( !Abc_NtkMfsAfterICheck( pNtk, pAbc->nIndFrames, nFramesAdd, pAbc->vIndFlops, pPars ) )
+        {
+            Abc_Print( -1, "Resynthesis has failed.\n" );
+            return 1;
+        }
+        if ( fUseAllFfs )
+        {
+            pAbc->nIndFrames = 0;
+            Vec_IntFreeP( &pAbc->vIndFlops );
+        }
+    }
+    else
+    {
+        // modify the current network
+        if ( !Abc_NtkPerformMfs( pNtk, pPars ) )
+        {
+            Abc_Print( -1, "Resynthesis has failed.\n" );
+            return 1;
+        }
+    }
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: mfs2 [-WFDMLCZNI <num>] [-daeijlvwh]\n" );
+    Abc_Print( -2, "\t           performs don't-care-based optimization of logic networks\n" );
+    Abc_Print( -2, "\t-W <num> : the number of levels in the TFO cone (0 <= num) [default = %d]\n",             pPars->nTfoLevMax );
+    Abc_Print( -2, "\t-F <num> : the max number of fanouts to skip (1 <= num) [default = %d]\n",                pPars->nFanoutMax );
+    Abc_Print( -2, "\t-D <num> : the max depth nodes to try (0 = no limit) [default = %d]\n",                   pPars->nDepthMax );
+    Abc_Print( -2, "\t-M <num> : the max node count of windows to consider (0 = no limit) [default = %d]\n",    pPars->nWinSizeMax );
+    Abc_Print( -2, "\t-L <num> : the max increase in node level after resynthesis (0 <= num) [default = %d]\n", pPars->nGrowthLevel );
+    Abc_Print( -2, "\t-C <num> : the max number of conflicts in one SAT run (0 = no limit) [default = %d]\n",   pPars->nBTLimit );
+    Abc_Print( -2, "\t-Z <num> : treat the first <num> logic nodes as fixed (0 = none) [default = %d]\n",       pPars->nFirstFixed );
+    Abc_Print( -2, "\t-N <num> : the max number of nodes to try (0 = all) [default = %d]\n",                    pPars->nNodesMax );
+    Abc_Print( -2, "\t-d       : toggle performing redundancy removal [default = %s]\n",                        pPars->fRrOnly? "yes": "no" );
+    Abc_Print( -2, "\t-a       : toggle minimizing area or area+edges [default = %s]\n",                        pPars->fArea? "area": "area+edges" );
+    Abc_Print( -2, "\t-e       : toggle high-effort resubstitution [default = %s]\n",                           pPars->fMoreEffort? "yes": "no" );
+    Abc_Print( -2, "\t-i       : toggle using inductive don't-cares [default = %s]\n",                          fIndDCs? "yes": "no" );
+    Abc_Print( -2, "\t-j       : toggle using all flops when \"-i\" is enabled [default = %s]\n",               fUseAllFfs? "yes": "no" );
+    Abc_Print( -2, "\t-I       : the number of additional frames inserted [default = %d]\n",                    nFramesAdd );
+    Abc_Print( -2, "\t-l       : toggle deriving don't-cares [default = %s]\n",                                 pPars->fUseDcs? "yes": "no" );
+    Abc_Print( -2, "\t-v       : toggle printing optimization summary [default = %s]\n",                        pPars->fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-w       : toggle printing detailed stats for each node [default = %s]\n",                pPars->fVeryVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    []
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandResubstitute( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc);
+    int RS_CUT_MIN =  4;
+    int RS_CUT_MAX = 16;
+    int c;
+    int nCutsMax;
+    int nNodesMax;
+    int nLevelsOdc;
+    int nMinSaved;
+    int fUpdateLevel;
+    int fUseZeros;
+    int fVerbose;
+    int fVeryVerbose;
+    int Log2Probs;
+    int Log2Divs;
+    extern int Abc_NtkResubstitute( Abc_Ntk_t * pNtk, int nCutsMax, int nNodesMax, int nMinSaved, int nLevelsOdc, int fUpdateLevel, int fVerbose, int fVeryVerbose, int Log2Probs, int Log2Divs );
+
+    // set defaults
+    nCutsMax     =  8;
+    nNodesMax    =  1;
+    nLevelsOdc   =  0;
+    nMinSaved    =  1;
+    fUpdateLevel =  1;
+    fUseZeros    =  0;
+    fVerbose     =  0;
+    fVeryVerbose =  0;
+    Log2Probs    =  0;
+    Log2Divs     =  0;
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "KNMFlzvwhPDV" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'K':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-K\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nCutsMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nCutsMax < 0 )
+                goto usage;
+            break;
+        case 'N':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-N\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nNodesMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nNodesMax < 0 )
+                goto usage;
+            break;
+        case 'M':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-M\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nMinSaved = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nMinSaved < 0 )
+                goto usage;
+            break;
+        case 'F':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-F\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nLevelsOdc = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nLevelsOdc < 0 )
+                goto usage;
+            break;
+
+        case 'P':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-P\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            Log2Probs = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( Log2Probs < 0 )
+                goto usage;
+            break;
+        case 'D':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-D\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            Log2Divs = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( Log2Divs < 0 )
+                goto usage;
+            break;
+        case 'V':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-V\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nCutsMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nCutsMax < 0 )
+                goto usage;
+            break;
+            
+        case 'l':
+            fUpdateLevel ^= 1;
+            break;
+        case 'z':
+            fUseZeros ^= 1;
+            break;
+        case 'v':
+            fVerbose ^= 1;
+            break;
+        case 'w':
+            fVeryVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+    if ( fUseZeros )
+        nMinSaved = 0;
+    if ( nMinSaved == 0 )
+        fUseZeros = 1;
+
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+    if ( nCutsMax < RS_CUT_MIN || nCutsMax > RS_CUT_MAX )
+    {
+        Abc_Print( -1, "Can only compute cuts for %d <= K <= %d.\n", RS_CUT_MIN, RS_CUT_MAX );
+        return 1;
+    }
+    if ( nNodesMax < 0 || nNodesMax > 3 )
+    {
+        Abc_Print( -1, "Can only resubstitute at most 3 nodes.\n" );
+        return 1;
+    }
+    if ( !Abc_NtkIsStrash(pNtk) )
+    {
+        Abc_Print( -1, "This command can only be applied to an AIG (run \"strash\").\n" );
+        return 1;
+    }
+    if ( Abc_NtkGetChoiceNum(pNtk) )
+    {
+        Abc_Print( -1, "AIG resynthesis cannot be applied to AIGs with choice nodes.\n" );
+        return 1;
+    }
+
+    // modify the current network
+    if ( !Abc_NtkResubstitute( pNtk, nCutsMax, nNodesMax, nMinSaved, nLevelsOdc, fUpdateLevel, fVerbose, fVeryVerbose, Log2Probs, Log2Divs ) )
+    {
+        Abc_Print( -1, "Refactoring has failed.\n" );
+        return 1;
+    }
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: resub [-KNMF <num>] [-lzvwh] [-PDV <num>]\n" );
+    Abc_Print( -2, "\t           performs technology-independent restructuring of the AIG\n" );
+    Abc_Print( -2, "\t-K <num> : the max cut size (%d <= num <= %d) [default = %d]\n", RS_CUT_MIN, RS_CUT_MAX, nCutsMax );
+    Abc_Print( -2, "\t-N <num> : the max number of nodes to add (0 <= num <= 3) [default = %d]\n", nNodesMax );
+    Abc_Print( -2, "\t-M <num> : the min number of nodes saved after one step (0 <= num) [default = %d]\n", nMinSaved );
+    Abc_Print( -2, "\t-F <num> : the number of fanout levels for ODC computation [default = %d]\n", nLevelsOdc );
+    Abc_Print( -2, "\t-l       : toggle preserving the number of levels [default = %s]\n", fUpdateLevel? "yes": "no" );
+    Abc_Print( -2, "\t-z       : toggle using zero-cost replacements [default = %s]\n", fUseZeros? "yes": "no" );
+    Abc_Print( -2, "\t-v       : toggle verbose printout [default = %s]\n", fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-w       : toggle verbose printout of ODC computation [default = %s]\n", fVeryVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h       : print the command usage\n\n");
+    Abc_Print( -2, "\t           When command line options '-P num', '-D num', and '-V num' are used,\n");
+    Abc_Print( -2, "\t           this command does not perform resubstitution; instead, it dumps a binary file\n");
+    Abc_Print( -2, "\t           containing 2^P resub problems, each containing 2^D-2 divs with support size V,\n");
+    Abc_Print( -2, "\t           while the last two divisors are the offset and the onset of the function\n");
+    Abc_Print( -2, "\t           (by default, the functions are completely specified; to get functions with don't-cares,\n");
+    Abc_Print( -2, "\t           the user has to use command-line option '-F num' to enable the limited ODC computation)\n");
+    Abc_Print( -2, "\t-P <num> : the log2 of the number of problems to be dumped [default = %d]\n", Log2Probs );
+    Abc_Print( -2, "\t-D <num> : the log2 of the number of divisors to be collected (4 <= num <= 7) [default = %d]\n", Log2Divs );
+    Abc_Print( -2, "\t-V <num> : the support size of the function (%d <= num <= %d) [default = %d]\n", RS_CUT_MIN, RS_CUT_MAX, nCutsMax );
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    []
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandResubUnate( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    extern Gia_Man_t * Gia_ManResubUnateOne( char * pFileName, int nLimit, int nDivMax, int fWriteSol, int fVerbose );
+    Gia_Man_t * pTemp;
+    int nLimit    = 16;
+    int nDivMax   = 50;
+    int fWriteSol =  0;
+    int fVerbose  =  0, c;
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "LDsvh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'L':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-L\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nLimit = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nLimit < 0 )
+                goto usage;
+            break;   
+        case 'D':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-D\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nDivMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nDivMax < 0 )
+                goto usage;
+            break;                        
+        case 's':
+            fWriteSol ^= 1;
+            break;
+        case 'v':
+            fVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+    if ( argc != globalUtilOptind + 1 ) 
+    {
+        Abc_Print( -1, "Input file should be given on the command line.\n" );
+        return 1;
+    }
+    pTemp = Gia_ManResubUnateOne( argv[globalUtilOptind], nLimit, nDivMax, fWriteSol, fVerbose );
+    if ( pTemp )
+    {
+        Aig_Man_t * pMan = Gia_ManToAig( pTemp, 0 );
+        Abc_Ntk_t * pNtk = Abc_NtkFromAigPhase( pMan );
+        Abc_FrameReplaceCurrentNetwork( pAbc, pNtk );
+        Aig_ManStop( pMan );
+        Gia_ManStop( pTemp );
+        return 0;
+    }
+    Abc_Print( 0, "The networks is not generated.\n" );    
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: resub_unate [-LD <num>] [-svh] <file>\n" );
+    Abc_Print( -2, "\t         solves one instance of the resub problem\n" );
+    Abc_Print( -2, "\t-L num : the limit on the number of nodes [default = %d]\n",                  nLimit );
+    Abc_Print( -2, "\t-D num : the maximum number of binate divisors to consider [default = %d]\n", nDivMax );
+    Abc_Print( -2, "\t-s     : toggle saving the result in the input file [default = %s]\n",        fWriteSol? "yes": "no" );
+    Abc_Print( -2, "\t-v     : toggle verbose printout [default = %s]\n",                           fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h     : print the command usage\n");
+    Abc_Print( -2, "\t<file> : resub problem file name\n");
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    []
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandResubCore( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    extern Gia_Man_t * Supp_ManSolveOne( char * pFileName, int nIters, int nRounds, int fWriteSol, int fVerbose );
+    Gia_Man_t * pTemp;
+    int nIters    = 1;
+    int nRounds   = 1;
+    int fWriteSol = 0;
+    int fVerbose  = 0, c;
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "IRsvh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'I':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-I\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nIters = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nIters < 0 )
+                goto usage;
+            break;   
+        case 'R':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-R\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nRounds = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nRounds < 0 )
+                goto usage;
+            break;                        
+        case 's':
+            fWriteSol ^= 1;
+            break;
+        case 'v':
+            fVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+    if ( argc != globalUtilOptind + 1 ) 
+    {
+        Abc_Print( -1, "Input file should be given on the command line.\n" );
+        return 1;
+    }
+    pTemp = Supp_ManSolveOne( argv[globalUtilOptind], nIters, nRounds, fWriteSol, fVerbose );
+    if ( pTemp )
+    {
+        Aig_Man_t * pMan = Gia_ManToAig( pTemp, 0 );
+        Abc_Ntk_t * pNtk = Abc_NtkFromAigPhase( pMan );
+        Abc_FrameReplaceCurrentNetwork( pAbc, pNtk );
+        Aig_ManStop( pMan );
+        Gia_ManStop( pTemp );
+        return 0;
+    }
+    Abc_Print( 0, "The networks is not generated.\n" );    
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: resub_core [-IR <num>] [-svh] <file>\n" );
+    Abc_Print( -2, "\t         solves one instance of the resub problem\n" );
+    Abc_Print( -2, "\t-I num : the number of iterations [default = %d]\n",                   nIters );
+    Abc_Print( -2, "\t-R num : the number of rounds in each iteration [default = %d]\n",     nRounds );
+    Abc_Print( -2, "\t-s     : toggle saving the result in the input file [default = %s]\n", fWriteSol? "yes": "no" );
+    Abc_Print( -2, "\t-v     : toggle verbose printout [default = %s]\n",                    fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h     : print the command usage\n");
+    Abc_Print( -2, "\t<file> : resub problem file name\n");
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    []
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandResubCheck( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    extern void Res6_ManResubCheck( char * pFileNameRes, char * pFileNameSol, int fVerbose );
+    extern void Res6_ManResubCheckPla( char * pFileName, int fVerbose );
+    char * pFileR = NULL, * pFileS = NULL;
+    int fVerbose = 0, c;
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "vh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'v':
+            fVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+    if ( argc == globalUtilOptind + 2 )
+    {
+        pFileR = argv[globalUtilOptind];
+        pFileS = argv[globalUtilOptind+1];
+    }
+    else if ( argc == globalUtilOptind + 1 )
+    {
+        pFileR = argv[globalUtilOptind];
+        pFileS = NULL;
+    }
+    else 
+    {
+        Abc_Print( -1, "Incorrect number of command line arguments.\n" );
+        return 1;
+    }
+    if ( !strcmp(pFileR + strlen(pFileR) - 3, "pla") )
+        Res6_ManResubCheckPla( pFileR, fVerbose );
+    else
+        Res6_ManResubCheck( pFileR, pFileS, fVerbose );
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: resub_check [-vh] <file1> <file2>\n" );
+    Abc_Print( -2, "\t           checks solution to a resub problem\n" );
+    Abc_Print( -2, "\t-v       : toggle verbose printout [default = %s]\n", fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t<file1>  : resub problem file name\n");
+    Abc_Print( -2, "\t<file2>  : (optional) solution file name\n");
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    []
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandAbc9SimRsb( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    extern int Gia_ManSimRsb( Gia_Man_t * p, int nCands, int fVerbose );
+    int c, nCands = 32, fVerbose = 0;
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "Nvh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'N':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-N\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nCands = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nCands < 0 )
+                goto usage;
+            break;
+        case 'v':
+            fVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+    if ( pAbc->pGia == NULL )
+    {
+        Abc_Print( -1, "Abc_CommandAbc9SimRsb(): There is no AIG.\n" );
+        return 1;
+    }
+    if ( Gia_ManRegNum(pAbc->pGia) > 0 )
+    {
+        Abc_Print( -1, "Abc_CommandAbc9SimRsb(): This command works only for combinational AIGs.\n" );
+        return 0;
+    }
+    if ( pAbc->pGia->vSimsPi == NULL )
+    {
+        Abc_Print( -1, "Abc_CommandAbc9SimRsb(): Does not have simulation information available.\n" );
+        return 0;
+    }
+    Gia_ManSimRsb( pAbc->pGia, nCands, fVerbose );
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: &simrsb [-N num] [-vh]\n" );
+    Abc_Print( -2, "\t         performs resubstitution\n" );
+    Abc_Print( -2, "\t-C num : the number of candidates to try [default = %d]\n", nCands );
+    Abc_Print( -2, "\t-v     : toggle printing verbose information [default = %s]\n", fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h     : print the command usage\n");
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Resubstitutes an AIG using compact windows and reusable proofs.]
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandAbc9Resub( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    Gia_Man_t * pNew;
+    int c, fKeepLevel = 1, fFast = 0, fVerbose = 0, nCutMax = 8, nSteps = 1, nMinSaved = 1;
+    Extra_UtilGetoptReset();
+    while ( (c = Extra_UtilGetopt(argc, argv, "KNMflvh")) != EOF )
+    {
+        switch ( c )
+        {
+        case 'K':
+        case 'N':
+        case 'M':
+        {
+            char * pEnd, * pArg;
+            long Value;
+            if ( globalUtilOptind >= argc ) goto usage;
+            pArg = argv[globalUtilOptind++];
+            Value = strtol(pArg, &pEnd, 10);
+            if ( pEnd == pArg || *pEnd || Value < 0 || Value > 1000000 ) goto usage;
+            if ( c == 'K' ) { if ( Value < 4 || Value > 16 ) goto usage; nCutMax = (int)Value; }
+            if ( c == 'N' ) { if ( Value > 4 ) goto usage; nSteps = (int)Value; }
+            if ( c == 'M' ) { if ( Value < 1 ) goto usage; nMinSaved = (int)Value; }
+            break;
+        }
+        case 'f': fFast ^= 1; break;
+        case 'l': fKeepLevel ^= 1; break;
+        case 'v': fVerbose ^= 1; break;
+        default: goto usage;
+        }
+    }
+    if ( globalUtilOptind != argc ) goto usage;
+    if ( pAbc->pGia == NULL )
+    {
+        Abc_Print( -1, "&resub: There is no AIG.\n" );
+        return 1;
+    }
+    if ( Gia_ManHasChoices(pAbc->pGia) || pAbc->pGia->pMuxes || Gia_ManXorNum(pAbc->pGia) || Gia_ManBufNum(pAbc->pGia) )
+    {
+        Abc_Print( -1, "&resub: This command requires an AIG without choices, XOR/MUX nodes, or barrier buffers.\n" );
+        return 1;
+    }
+    if ( Gia_ManIsSeqWithBoxes(pAbc->pGia) && !Gia_ManIsNormalized(pAbc->pGia) )
+    {
+        Abc_Print( -1, "&resub: Sequential AIGs with timing boxes must be normalized.\n" );
+        return 1;
+    }
+    if ( Gia_ManObjNum(pAbc->pGia) > Gie_ObjectLimit() / 2 )
+    {
+        Abc_Print( -1, "&resub: The AIG exceeds the mutable-graph object limit.\n" );
+        return 1;
+    }
+    pNew = Rsub_ManPerformEx( pAbc->pGia, nCutMax, nSteps, nMinSaved, fKeepLevel, fFast, fVerbose );
+    if ( pNew == NULL )
+    {
+        Abc_Print( -1, "&resub: Resubstitution has failed.\n" );
+        return 1;
+    }
+    Abc_FrameUpdateGia( pAbc, pNew );
+    return 0;
+usage:
+    Abc_Print( -2, "usage: &resub [-KNM num] [-flvh]\n" );
+    Abc_Print( -2, "\t         performs one pass of AIG resubstitution\n" );
+    Abc_Print( -2, "\t-K num : maximum cut size (4 to 16) [default = %d]\n", nCutMax );
+    Abc_Print( -2, "\t-N num : maximum new nodes (0 to 4) [default = %d]\n", nSteps );
+    Abc_Print( -2, "\t-M num : minimum nodes saved [default = %d]\n", nMinSaved );
+    Abc_Print( -2, "\t-f     : toggle faster search with reduced effort [default = %s]\n", fFast ? "yes" : "no" );
+    Abc_Print( -2, "\t-l     : toggle preserving the number of levels [default = %s]\n", fKeepLevel ? "yes" : "no" );
+    Abc_Print( -2, "\t-v     : toggle verbose printout [default = %s]\n", fVerbose ? "yes" : "no" );
+    Abc_Print( -2, "\t-h     : print the command usage\n" );
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Sweeps mapped LUTs using a persistent circuit SAT solver.]
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+static int Abc_CommandAbc9Mfs3( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    extern Gia_Man_t * Gia_ManPerformMfs3( Gia_Man_t *, Sfm_Par_t *, int, int, int );
+    Sfm_Par_t Pars, * pPars = &Pars;
+    Gia_Man_t * pNew;
+    int c, nSideMax = 8, nRounds = 1, nRegs, fSingle = 0;
+    Sfm_ParSetDefault(pPars);
+    pPars->nTfoLevMax = 5;
+    pPars->nDepthMax = 100;
+    pPars->nWinSizeMax = 2000;
+    Extra_UtilGetoptReset();
+    while ( (c = Extra_UtilGetopt(argc, argv, "WFDMLCNSRdaesvh")) != EOF )
+    {
+        switch ( c )
+        {
+        case 'W': case 'F': case 'D': case 'M': case 'L':
+        case 'C': case 'N': case 'S': case 'R':
+        {
+            char * pEnd;
+            const char * pArg;
+            long Value;
+            if ( globalUtilOptind >= argc ) goto usage;
+            pArg = argv[globalUtilOptind++];
+            errno = 0;
+            Value = strtol(pArg,&pEnd,10);
+            if ( errno || pArg == pEnd || *pEnd || Value < 0 || Value > ABC_INFINITY ) goto usage;
+            if ( c == 'W' ) { if ( Value > 32 ) goto usage; pPars->nTfoLevMax = (int)Value; }
+            if ( c == 'F' ) pPars->nFanoutMax = (int)Value;
+            if ( c == 'D' ) pPars->nDepthMax = (int)Value;
+            if ( c == 'M' ) pPars->nWinSizeMax = (int)Value;
+            if ( c == 'L' ) pPars->nGrowthLevel = (int)Value;
+            if ( c == 'C' ) pPars->nBTLimit = (int)Value;
+            if ( c == 'N' ) pPars->nNodesMax = (int)Value;
+            if ( c == 'S' ) { if ( Value > 8 ) goto usage; nSideMax = (int)Value; }
+            if ( c == 'R' ) { if ( !Value || Value > 100 ) goto usage; nRounds = (int)Value; }
+            break;
+        }
+        case 'd': pPars->fRrOnly ^= 1; break;
+        case 'a': pPars->fArea ^= 1; break;
+        case 'e': pPars->fMoreEffort ^= 1; break;
+        case 's': fSingle ^= 1; break;
+        case 'v': pPars->fVerbose ^= 1; break;
+        default: goto usage;
+        }
+    }
+    if ( globalUtilOptind != argc ) goto usage;
+    if ( !pAbc->pGia || !Gia_ManHasMapping(pAbc->pGia) )
+    {
+        Abc_Print(-1,"&mfs3: A LUT-mapped AIG is required. Use &if2 -K 6, or read a saved mapping with &r -s.\n");
+        return 1;
+    }
+    if ( Gia_ManBufNum(pAbc->pGia) || Gia_ManHasChoices(pAbc->pGia) ||
+         Gia_ManMuxNum(pAbc->pGia) || Gia_ManXorNum(pAbc->pGia) || pAbc->pGia->pManTime || pAbc->pGia->pAigExtra )
+    {
+        Abc_Print(-1,"&mfs3: Choices, explicit XOR/MUX nodes, barrier buffers, and timing boxes are not supported.\n");
+        return 1;
+    }
+    if ( Gia_ManLutSizeMax(pAbc->pGia) > 15 )
+    {
+        Abc_Print(-1,"&mfs3: LUTs with more than 15 inputs are not supported.\n");
+        return 1;
+    }
+    nRegs = Gia_ManRegNum(pAbc->pGia);
+    pAbc->pGia->nRegs = 0;
+    pNew = Gia_ManPerformMfs3(pAbc->pGia,pPars,nSideMax,nRounds,fSingle);
+    Gia_ManSetRegNum(pAbc->pGia,nRegs);
+    if ( !pNew ) return 1;
+    Gia_ManSetRegNum(pNew,nRegs);
+    Abc_FrameUpdateGia(pAbc,pNew);
+    return 0;
+usage:
+    Abc_Print(-2,"usage: &mfs3 [-WFDMLCNSR num] [-daesvh]\n");
+    Abc_Print(-2,"\t         sweeps mapped LUTs using persistent circuit Glucose3 and bounded care\n");
+    Abc_Print(-2,"\t         resubstitutes LUTs with at most 8 inputs; larger LUTs are retained\n");
+    Abc_Print(-2,"\t         by default an area-only sweep precedes the full sweep\n");
+    Abc_Print(-2,"\t-W num : fanout depth in LUT levels, 0 disables ODCs (0..32) [default = %d]\n",pPars->nTfoLevMax);
+    Abc_Print(-2,"\t-S num : maximum side signals in the care table (0..8) [default = %d]\n",nSideMax);
+    Abc_Print(-2,"\t         oversized care windows are retried at a shallower level\n");
+    Abc_Print(-2,"\t-F num : fanout search limit for divisors, 0 unlimited [default = %d]\n",pPars->nFanoutMax);
+    Abc_Print(-2,"\t-D num : maximum pivot level, 0 unlimited [default = %d]\n",pPars->nDepthMax);
+    Abc_Print(-2,"\t-M num : maximum divisor cone size, 0 unlimited [default = %d]\n",pPars->nWinSizeMax);
+    Abc_Print(-2,"\t-L num : allowed LUT level growth [default = %d]\n",pPars->nGrowthLevel);
+    Abc_Print(-2,"\t-C num : conflict budget per attempted support, 0 unlimited [default = %d]\n",pPars->nBTLimit);
+    Abc_Print(-2,"\t-N num : maximum pivots to try, 0 all [default = %d]\n",pPars->nNodesMax);
+    Abc_Print(-2,"\t-R num : maximum sweeps after the optional area prepass (1..100) [default = %d]\n",nRounds);
+    Abc_Print(-2,"\t-d     : toggle fanin removal only [default = %s]\n",pPars->fRrOnly ? "yes" : "no");
+    Abc_Print(-2,"\t-a     : toggle area only versus area and edges [default = %s]\n",pPars->fArea ? "area" : "area+edges");
+    Abc_Print(-2,"\t-e     : toggle care circuits for windows exceeding -S [default = %s]\n",pPars->fMoreEffort ? "yes" : "no");
+    Abc_Print(-2,"\t-s     : toggle skipping the initial area prepass [default = %s]\n",fSingle ? "yes" : "no");
+    Abc_Print(-2,"\t-v     : toggle statistics [default = %s]\n",pPars->fVerbose ? "yes" : "no");
+    Abc_Print(-2,"\t-h     : print command usage\n");
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Optimizes a mapped network using per-node SAT windows.]
+
+  Description []
+  SideEffects []
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandAbc9Mfs( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    extern Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars );
+    Gia_Man_t * pTemp; int c;
+    Sfm_Par_t Pars, * pPars = &Pars;
+    Sfm_ParSetDefault( pPars );
+    pPars->nTfoLevMax  =    5;
+    pPars->nDepthMax   =  100;
+    pPars->nWinSizeMax = 2000;
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "WFDMLCNdaeblvwh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'W':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-W\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nTfoLevMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nTfoLevMax < 0 )
+                goto usage;
+            break;
+        case 'F':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-F\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nFanoutMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nFanoutMax < 0 )
+                goto usage;
+            break;
+        case 'D':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-D\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nDepthMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nDepthMax < 0 )
+                goto usage;
+            break;
+        case 'M':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-M\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nWinSizeMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nWinSizeMax < 0 )
+                goto usage;
+            break;
+        case 'L':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-L\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nGrowthLevel = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nGrowthLevel < 0 || pPars->nGrowthLevel > ABC_INFINITY )
+                goto usage;
+            break;
+        case 'C':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-C\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nBTLimit = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nBTLimit < 0 )
+                goto usage;
+            break;
+        case 'N':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-N\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nNodesMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nNodesMax < 0 )
+                goto usage;
+            break;
+        case 'd':
+            pPars->fRrOnly ^= 1;
+            break;
+        case 'a':
+            pPars->fArea ^= 1;
+            break;
+        case 'e':
+            pPars->fMoreEffort ^= 1;
+            break;
+        case 'b':
+            pPars->fAllBoxes ^= 1;
+            break;
+        case 'l':
+            pPars->fUseDcs ^= 1;
+            break;
+        case 'v':
+            pPars->fVerbose ^= 1;
+            break;
+        case 'w':
+            pPars->fVeryVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+    if ( pAbc->pGia == NULL )
+    {
+        Abc_Print( -1, "Abc_CommandAbc9Mfs(): There is no AIG.\n" );
+        return 0;
+    }
+    if ( Gia_ManBufNum(pAbc->pGia) )
+    {
+        Abc_Print( -1, "Abc_CommandAbc9Mfs(): This command does not work with barrier buffers.\n" );
+        return 1;
+    }
+    if ( !Gia_ManHasMapping(pAbc->pGia) )
+    {
+        Abc_Print( -1, "Abc_CommandAbc9Mfs(): The current AIG has no mapping.\n" );
+        return 0;
+    }
+    if ( Gia_ManLutSizeMax(pAbc->pGia) > 15 )
+    {
+        Abc_Print( -1, "Abc_CommandAbc9Mfs(): The current mapping has nodes with more than 15 inputs. Cannot use \"mfs\".\n" );
+        return 0;
+    }
+//    if ( pAbc->pGia->pAigExtra && Gia_ManPiNum(pAbc->pGia->pAigExtra) > 6 )
+//    {
+//        Abc_Print( -1, "Abc_CommandAbc9Mfs(): The current white-boxes have more than 6 inputs. Cannot use \"mfs\".\n" );
+//        return 0;
+//    }
+    if ( Gia_ManRegNum(pAbc->pGia) == 0 )
+        pTemp = Gia_ManPerformMfs( pAbc->pGia, pPars );
+    else
+    {
+        int nRegs = Gia_ManRegNum(pAbc->pGia);
+        pAbc->pGia->nRegs = 0;
+        pTemp = Gia_ManPerformMfs( pAbc->pGia, pPars );
+        Gia_ManSetRegNum( pAbc->pGia, nRegs );
+        if ( pTemp )
+            Gia_ManSetRegNum( pTemp, nRegs );
+    }
+    Abc_FrameUpdateGia( pAbc, pTemp );
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: &mfs [-WFDMLCN <num>] [-daeblvwh]\n" );
+    Abc_Print( -2, "\t           performs don't-care-based optimization of logic networks\n" );
+    Abc_Print( -2, "\t-W <num> : the number of levels in the TFO cone (0 <= num) [default = %d]\n",             pPars->nTfoLevMax );
+    Abc_Print( -2, "\t-F <num> : the max number of fanouts to skip (1 <= num) [default = %d]\n",                pPars->nFanoutMax );
+    Abc_Print( -2, "\t-D <num> : the max depth nodes to try (0 = no limit) [default = %d]\n",                   pPars->nDepthMax );
+    Abc_Print( -2, "\t-M <num> : the max node count of windows to consider (0 = no limit) [default = %d]\n",    pPars->nWinSizeMax );
+    Abc_Print( -2, "\t-L <num> : the max increase in node level after resynthesis (0 <= num) [default = %d]\n", pPars->nGrowthLevel );
+    Abc_Print( -2, "\t-C <num> : the max number of conflicts in one SAT run (0 = no limit) [default = %d]\n",   pPars->nBTLimit );
+    Abc_Print( -2, "\t-N <num> : the max number of nodes to try (0 = all) [default = %d]\n",                    pPars->nNodesMax );
+    Abc_Print( -2, "\t-d       : toggle performing redundancy removal [default = %s]\n",                        pPars->fRrOnly? "yes": "no" );
+    Abc_Print( -2, "\t-a       : toggle minimizing area or area+edges [default = %s]\n",                        pPars->fArea? "area": "area+edges" );
+    Abc_Print( -2, "\t-e       : toggle high-effort resubstitution [default = %s]\n",                           pPars->fMoreEffort? "yes": "no" );
+    Abc_Print( -2, "\t-b       : toggle preserving all white boxes [default = %s]\n",                           pPars->fAllBoxes? "yes": "no" );
+    Abc_Print( -2, "\t-l       : toggle deriving don't-cares [default = %s]\n",                                 pPars->fUseDcs? "yes": "no" );
+    Abc_Print( -2, "\t-v       : toggle printing optimization summary [default = %s]\n",                        pPars->fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-w       : toggle printing detailed stats for each node [default = %s]\n",                pPars->fVeryVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    []
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandAbc9Mfsd( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    extern Gia_Man_t * Sbd_NtkPerform( Gia_Man_t * pGia, Sbd_Par_t * pPars );
+    Gia_Man_t * pTemp; int c;
+    Sbd_Par_t Pars, AreaPars, * pPars = &Pars;
+    Sbd_ParSetDefault( pPars );
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "KSNPRWFMCBamcdepAqvwh" ) ) != EOF )
+    {
+        if ( strchr("KSNPRWFMCB", c) && globalUtilOptind < argc )
+        {
+            char * pEnd;
+            long Value;
+            errno = 0;
+            Value = strtol( argv[globalUtilOptind], &pEnd, 10 );
+            if ( errno == ERANGE || pEnd == argv[globalUtilOptind] || *pEnd || Value < (c == 'R' ? 1 : 0) || Value > INT_MAX )
+            {
+                Abc_Print( -1, "Command line switch \"-%c\" requires a %s integer.\n", c, c == 'R' ? "positive" : "nonnegative" );
+                goto usage;
+            }
+        }
+        switch ( c )
+        {
+        case 'K':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-K\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nLutSize = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nLutSize < 2 || pPars->nLutSize > 6 )
+                goto usage;
+            break;
+        case 'S':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-S\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nLutNum = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nLutNum < 1 || pPars->nLutNum > 3 )
+                goto usage;
+            break;
+        case 'N':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-N\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nCutSize = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nCutSize < 2 || pPars->nCutSize > 10 )
+                goto usage;
+            break;
+        case 'P':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-P\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nCutNum = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nCutNum < 2 || pPars->nCutNum > 500 )
+                goto usage;
+            break;
+        case 'W':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-W\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nTfoLevels = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nTfoLevels < 0 )
+                goto usage;
+            break;
+        case 'F':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-F\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nTfoFanMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nTfoFanMax < 1 )
+                goto usage;
+            break;
+        case 'M':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-M\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nWinSizeMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nWinSizeMax < 0 )
+                goto usage;
+            break;
+        case 'C':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-C\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nBTLimit = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nBTLimit < 0 )
+                goto usage;
+            break;
+        case 'B':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-B\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nBTLimitDch = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            break;
+        case 'R':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-R\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            pPars->nIters = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( pPars->nIters < 1 )
+                goto usage;
+            break;
+        case 'q':
+            pPars->fChoices = 1;
+            break;
+        case 'a':
+            pPars->fArea = 1;
+            break;
+        case 'm':
+            pPars->fMapping ^= 1;
+            break;
+        case 'c':
+            pPars->fMoreCuts ^= 1;
+            break;
+        case 'd':
+            pPars->fDelay = 1;
+            break;
+        case 'e':
+            pPars->fFindDivs ^= 1;
+            break;
+        case 'p':
+            pPars->fUsePath = 1;
+            break;
+        case 'A':
+            pPars->fUsePath = 0;
+            break;
+        case 'v':
+            pPars->fVerbose ^= 1;
+            break;
+        case 'w':
+            pPars->fVeryVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+    if ( pAbc->pGia == NULL )
+    {
+        Abc_Print( -1, "&mfs2: There is no AIG.\n" );
+        return 1;
+    }
+    if ( globalUtilOptind != argc || pPars->nCutSize < pPars->nLutSize )
+        goto usage;
+    if ( pPars->fArea && pPars->fDelay )
+    {
+        Abc_Print( -1, "Area-only (-a) and delay (-d) modes cannot be combined.\n" );
+        return 1;
+    }
+    if ( Gia_ManBufNum(pAbc->pGia) )
+    {
+        Abc_Print( -1, "&mfs2: This command does not work with barrier buffers.\n" );
+        return 1;
+    }
+    pTemp = Sbd_NtkPerform( pAbc->pGia, pPars );
+    if ( pTemp == NULL )
+        return 1;
+    Abc_FrameUpdateGia( pAbc, pTemp );
+    return 0;
+
+usage:
+    AreaPars = Pars;
+    AreaPars.fDelay = 0;
+    Sbd_ParResolve( &AreaPars );
+    Sbd_ParResolve( pPars );
+    Abc_Print( -2, "usage: &mfs2 [-KSNPRWFMCB <num>] [-amcdepAqvwh]\n" );
+    Abc_Print( -2, "\t           performs SAT-based LUT optimization and remapping\n" );
+    Abc_Print( -2, "\t           default: minimize LUT count without increasing the input LUT depth\n" );
+    Abc_Print( -2, "\t           delay mode includes structural choices and a final SAT/IF area pass\n" );
+    Abc_Print( -2, "\t           unmapped inputs are first mapped with &if -K; input LUTs must fit K\n" );
+    Abc_Print( -2, "\t           XAIG boxes are preserved; depth includes one level per box arc (levB)\n" );
+    Abc_Print( -2, "\t-K <num> : the target LUT size (2 <= num <= 6) [default = %d]\n",                        pPars->nLutSize );
+    Abc_Print( -2, "\t-S <num> : the LUT structure size for delay search (1 <= num <= 3) [default = %d]\n",     pPars->nLutNum );
+    Abc_Print( -2, "\t-N <num> : the cut size for delay search (K <= num <= 10) [default = %d]\n",             pPars->nCutSize );
+    Abc_Print( -2, "\t-P <num> : the number of cuts for delay search (2 <= num <= 500) [default = %d]\n",       pPars->nCutNum );
+    Abc_Print( -2, "\t-R <num> : max complete delay-mode iterations (1 <= num) [default = %d]\n",              pPars->nIters );
+    Abc_Print( -2, "\t           extra iterations require -d; stop unless depth or equal-depth LUT count improves\n" );
+    Abc_Print( -2, "\t-W <num> : the number of levels in the TFO cone (0 <= num) [default = %d]\n",             pPars->nTfoLevels );
+    Abc_Print( -2, "\t-F <num> : the max number of fanouts to skip (1 <= num) [default = %d]\n",                pPars->nTfoFanMax );
+    Abc_Print( -2, "\t-M <num> : the max node count of windows to consider (0 = no limit) [default = %d]\n",    pPars->nWinSizeMax );
+    Abc_Print( -2, "\t-C <num> : the max number of conflicts in one SAT run (0 = no limit) [default = %d]\n",   pPars->nBTLimit );
+    if ( pPars->fDelay )
+    {
+        Abc_Print( -2, "\t           final area defaults: W=%d F=%d M=%d C=%d; explicit values apply to both profiles\n",
+            AreaPars.nTfoLevels, AreaPars.nTfoFanMax, AreaPars.nWinSizeMax, AreaPars.nBTLimit );
+    }
+    Abc_Print( -2, "\t-B <num> : choice SAT conflicts (0 = no limit; also capped by -C) [default = %d]\n", pPars->nBTLimitDch );
+    Abc_Print( -2, "\t           the choice budget does not limit delay search\n" );
+    Abc_Print( -2, "\t-a       : minimize area without a depth constraint (incompatible with -d)\n" );
+    Abc_Print( -2, "\t-d       : reduce depth, then minimize area under the achieved depth bound\n" );
+    Abc_Print( -2, "\t-q       : add structural choices and a final SAT/IF area pass (included in -d)\n" );
+    Abc_Print( -2, "\t-m       : toggle returning a LUT mapping [default = %s]\n",                           pPars->fMapping? "yes": "no" );
+    Abc_Print( -2, "\t-c       : toggle using several cuts in delay search [default = %s]\n",                  pPars->fMoreCuts? "yes": "no" );
+    Abc_Print( -2, "\t-e       : toggle extra divisor search in delay mode (formerly -d) [default = %s]\n",    pPars->fFindDivs? "yes": "no" );
+    Abc_Print( -2, "\t-p       : restrict delay search to critical paths of the LUT mapping (default)\n" );
+    Abc_Print( -2, "\t-A       : search all nodes in delay mode\n" );
+    Abc_Print( -2, "\t-v       : toggle printing optimization summary [default = %s]\n",                        pPars->fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-w       : toggle printing detailed stats for each node [default = %s]\n",                pPars->fVeryVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Handles exact window optimization.]
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandAbc9eSLIM( Abc_Frame_t * pAbc, int argc, char ** argv ) {
+  extern void seteSLIMParams(eSLIM_ParamStruct* params);
+  extern Gia_Man_t* applyeSLIM(Gia_Man_t * pGia, const eSLIM_ParamStruct* params);
+  
+  eSLIM_ParamStruct params;
+  int c;
+  Gia_Man_t * pTemp;
+  seteSLIMParams(&params);
+  params.aig = 1;
+  Extra_UtilGetoptReset();
+  while ( ( c = Extra_UtilGetopt( argc, argv, "CDIPRSTVWXZcfhistx" ) ) != EOF ) {
+      switch ( c ) {
+        case 'C':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-C\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.approximate_relation = 1;
+          params.relation_tfo_bound  = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.relation_tfo_bound < 0 )
+              goto usage;
+          if (globalUtilOptind < argc) {
+            char *next;
+            int tfi_bound = strtol (argv[globalUtilOptind], &next, 10);
+            if (argv[globalUtilOptind] != next && *next == '\0') {
+              params.generate_relation_with_tfi_limit = 1;
+              params.relation_tfi_bound = tfi_bound;
+              globalUtilOptind++;
+              if (params.relation_tfi_bound < 0) {
+                goto usage;
+              }
+            }
+          }
+          break;
+        case 'D':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-D\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.synthesis_approach = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.synthesis_approach < 0 ||  params.synthesis_approach > 3)
+              goto usage;
+          break;
+        case 'I':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-I\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.iterations = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.iterations < 0 )
+              goto usage;
+          break;
+        case 'P':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-P\" should be followed by a float.\n" );
+              goto usage;
+          }
+          params.expansion_probability = atof(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.expansion_probability <= 0 || params.expansion_probability > 1)
+              goto usage;
+          break;
+        case 'R':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-R\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.nruns = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.nruns < 1 )
+              goto usage;
+          break;
+        case 'S':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-S\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.subcircuit_max_size = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.subcircuit_max_size < 2 )
+              goto usage;
+          break;
+        case 'T':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-T\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.timeout = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.timeout < 1 )
+              goto usage;
+          break;
+        case 'V':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-V\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.verbosity_level = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.verbosity_level < 0 || params.verbosity_level > 3 )
+              goto usage;
+          break;
+        case 'W':
+          if ( globalUtilOptind + 1 >= argc)
+          {
+              Abc_Print( -1, "Command line switch \"-W\" should be followed by two integers.\n" );
+              goto usage;
+          }
+          params.nWindows = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if (params.nWindows <= 0) 
+            goto usage;
+          params.window_size = atoi(argv[globalUtilOptind]);
+          if (params.window_size <= 0)
+            goto usage;
+          globalUtilOptind++;
+          break;
+        case 'X':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-X\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.additional_gates = atoi(argv[globalUtilOptind]);
+          if ( params.additional_gates < 0 )
+              goto usage;
+          globalUtilOptind++;
+          break;
+        case 'Z':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-Z\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.fix_seed = 1;
+          params.seed = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          break;
+        case 'c' :
+          params.criticial_path_selection_bias ^= 1;
+          break;
+        case 'f' :
+          params.forward_search ^= 1;
+          break;
+        case 'h':
+          goto usage;
+        case 'i' :
+          params.apply_inprocessing ^= 1;
+          break;
+        case 's' :
+          params.fill_subcircuits ^= 1;
+          break;
+        case 't' :
+          params.use_taboo_list ^= 1;
+          break;
+        case 'x' :
+          params.aig = 0;
+          break;
+        default:
+          goto usage;
+      }
+  }
+  if (params.nWindows > 0 && params.synthesis_approach != 0) {
+    Abc_Print( -1, "Windows can only be used with area minimization\n" );
+    return 1;
+  }
+  if ( pAbc->pGia == NULL ) {
+        Abc_Print( -1, "Abc_CommandAbc9Test(): There is no AIG.\n" );
+        return 1;
+  }
+
+  pTemp = applyeSLIM(pAbc->pGia, &params);
+  if (pTemp == NULL) {
+    Abc_Print( -1, "eSLIM could not process the given circuit.\n" );
+    return 1;
+  }
+    
+  Abc_FrameUpdateGia( pAbc, pTemp );
+  return 0;
+
+
+  usage:
+    Abc_Print( -2, "usage: &eslim [-CDIPRSTVWXZ <num>] [-cfhistx]\n" );
+    Abc_Print( -2, "\t           circuit optimisation using exact synthesis and the SAT-based local improvement method (SLIM)\n" );
+    Abc_Print( -2, "\t-C <num> [<num>] : approximate Boolean relations by only considering the first C levels in the cone\n" );
+    Abc_Print( -2, "\t           (TFO bound); an optional second integer limits the TFI cone as well.\n" );
+    Abc_Print( -2, "\t-D <num> : delay mode: 0 = area, 1 = area with depth bound, 2 = area then depth, 3 = depth [default = %d]\n",  params.synthesis_approach );
+    Abc_Print( -2, "\t           Mode 1 keeps both exported AIG node count and level count at most their input values.\n" );
+    Abc_Print( -2, "\t           Area mode (0) may increase levels. Use mode 1 to preserve the input bound.\n" );
+    Abc_Print( -2, "\t-I <num> : the maximal number of iterations (0 = no limit) for the individual eSLIM runs [default = %d]\n",  params.iterations  );
+    Abc_Print( -2, "\t-P <num> : the probability of expanding a node [default = %.2f]\n",    params.expansion_probability );
+    Abc_Print( -2, "\t-R <num> : the number of runs of eSLIM + Inprocessing [default = %d]\n",    params.nruns );
+    Abc_Print( -2, "\t-S <num> : the maximal size of considered subcircuits [default = %d]\n",    params.subcircuit_max_size );
+    Abc_Print( -2, "\t-T <num> : the timeout in seconds for the individual eSLIM runs [default = %d]\n",    params.timeout );
+    Abc_Print( -2, "\t-V <num> : the verbosity level [default = %d]\n",       params.verbosity_level);
+    Abc_Print( -2, "\t           Level 1 includes search/cache counters; level 2 adds SAT-call timings; level 3 adds per-size details.\n" );
+    Abc_Print( -2, "\t-W <m> <n> : Use m windows of size n [default = %d, %d]\n",       params.nWindows, params.window_size);
+    Abc_Print( -2, "\t-X <num> : the maximal number of additional gates that may be used for depth optimisation [default = %d]\n", params.additional_gates);
+    Abc_Print( -2, "\t-Z <num> : use a fixed seed\n");
+    Abc_Print( -2, "\t-c       : toggle bias for selection of nodes on the critical path [default = %s]\n", params.criticial_path_selection_bias ? "yes" : "no");
+    Abc_Print( -2, "\t-f       : toggle forward expansion of root nodes [default = %s]\n", params.forward_search ? "yes" : "no");
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    Abc_Print( -2, "\t-i       : toggle inprocessing [default = %s]\n", params.apply_inprocessing ? "yes" : "no");
+    Abc_Print( -2, "\t-s       : toggle filling subcircuits [default = %s]\n", params.fill_subcircuits ? "yes" : "no");
+    Abc_Print( -2, "\t-t       : toggle using the taboo list [default = %s]\n", params.use_taboo_list ? "yes" : "no");
+    Abc_Print( -2, "\t-x       : allow xor-gates [default = %s]\n", !params.aig ? "yes" : "no");
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tDescription:\n");
+    Abc_Print( -2, "\t    &eslim is a high-effort area-optimisation command for AIGs.\n");
+    Abc_Print( -2, "\t    It targets already optimised circuits, where it can find improvements\n");
+    Abc_Print( -2, "\t    that standard optimisation misses; for (highly) unoptimised AIGs,\n");
+    Abc_Print( -2, "\t    run other abc commands first.\n");
+    Abc_Print( -2, "\t    For optimising LUTs, see the related command elslim.\n");
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tTermination:\n");
+    Abc_Print( -2, "\t    &eslim runs until the time (-T) or iteration (-I) bound is reached\n");
+    Abc_Print( -2, "\t    and returns the best circuit found so far. Typically, &eslim is run\n");
+    Abc_Print( -2, "\t    for at least several minutes up to a few hours; longer run times give\n");
+    Abc_Print( -2, "\t    better results, with diminishing improvements over time.\n");
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tPerformance considerations:\n");
+    Abc_Print( -2, "\t    The run time per iteration grows with the size of the considered AIG.\n");
+    Abc_Print( -2, "\t    AIGs with up to a few thousand nodes require no additional handling;\n");
+    Abc_Print( -2, "\t    for larger AIGs, restrict the relation computation with -C or\n");
+    Abc_Print( -2, "\t    optimise windows with -W instead of the entire AIG.\n");
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\t    The run time per iteration also grows with the size of the replaced\n");
+    Abc_Print( -2, "\t    subcircuits. If they are too large, iterations take too long, and if\n");
+    Abc_Print( -2, "\t    they are too small, they offer too little potential for improvement.\n");
+    Abc_Print( -2, "\t    The default maximal subcircuit size (-S) is a good compromise.\n");
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tCombining with other commands:\n");
+    Abc_Print( -2, "\t    After the main procedure, &eslim runs additional abc commands that\n");
+    Abc_Print( -2, "\t    depend on the delay mode (-D); disabling them with -i is not recommended.\n");
+    Abc_Print( -2, "\t    Multiple runs with shorter timeouts are often beneficial, since each run\n");
+    Abc_Print( -2, "\t    is followed by inprocessing; e.g. six runs of 10 minutes (-T 600 -R 6)\n");
+    Abc_Print( -2, "\t    instead of one run of one hour (-T 3600).\n");
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tDepth optimisation:\n");
+    Abc_Print( -2, "\t    By default, &eslim reduces the AIG size and may increase its depth.\n");
+    Abc_Print( -2, "\t    Use -D 1 to keep both size and depth at most their input values; in several\n");
+    Abc_Print( -2, "\t    experiments, this configuration in fact reduced the depth substantially.\n");
+    Abc_Print( -2, "\t    Use -D 2 to first compute minimal-size replacements and then choose, among\n");
+    Abc_Print( -2, "\t    those, one that yields minimum depth. In general, -D 1 should be preferred\n");
+    Abc_Print( -2, "\t    over -D 2, since it often reduces depth as well, without the cost of\n");
+    Abc_Print( -2, "\t    additional SAT-synthesis calls.\n");
+    Abc_Print( -2, "\t    Use -D 3 to compute replacements that yield minimal depth without\n");
+    Abc_Print( -2, "\t    increasing the size.\n");
+    Abc_Print( -2, "\t    In our experiments, -D 3 typically worked best in combination with -c.\n");
+    Abc_Print( -2, "\t    The parameter -X allows using additional gates in each synthesis step.\n");
+    Abc_Print( -2, "\t    It is generally not recommended to use -X; it mainly serves for testing\n");
+    Abc_Print( -2, "\t    and might be removed in the future.\n");
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tRecommended settings:\n");
+    Abc_Print( -2, "\t    We recommend the flags -t and -f. Note that the default\n");
+    Abc_Print( -2, "\t    behaviour of &eslim may change in future versions; in particular,\n");
+    Abc_Print( -2, "\t    the flags -t and -f are likely to be enabled by default.\n");
+    Abc_Print( -2, "\t    Exemplary configurations:\n");
+    Abc_Print( -2, "\t    &eslim -T 1800 -R 4 -t -f\n");
+    Abc_Print( -2, "\t    &eslim -T 1800 -D 1 -R 4 -t -f\n");
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tReferences:\n");
+    Abc_Print( -2, "\t    This command was contributed by Franz-Xaver Reichl (University of Freiburg).\n" );
+    Abc_Print( -2, "\t    F.-X. Reichl, F. Slivovsky, S. Szeider.\n");
+    Abc_Print( -2, "\t    \"eSLIM: Circuit Minimization with SAT Based Local Improvement\"\n");
+    Abc_Print( -2, "\t    F.-X. Reichl, C. Scholl.\n");
+    Abc_Print( -2, "\t    \"Delay-Constrained Area Optimisation Using SAT-Based Local Improvement\"\n");
+
+    return 1;
+
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Reads an unsigned command-line argument without wrapping.]
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+
+static int Es_ReadUnsigned( const char * pText, unsigned int * pValue )
+{
+    char * pEnd;
+    unsigned long Value;
+    if ( *pText == '-' )
+        return 0;
+    errno = 0;
+    Value = strtoul( pText, &pEnd, 10 );
+    if ( pText == pEnd || *pEnd || errno == ERANGE || Value > UINT_MAX )
+        return 0;
+    *pValue = (unsigned int)Value;
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Reads a nonnegative integer without truncation or overflow.]
+
+***********************************************************************/
+static int Es2_ReadNonnegativeInt( const char * pText, int * pValue )
+{
+    unsigned int Value;
+    if ( !Es_ReadUnsigned( pText, &Value ) || Value > INT_MAX )
+        return 0;
+    *pValue = (int)Value;
+    return 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Prints common guidance for the consolidated AIG and LUT commands.]
+
+***********************************************************************/
+static void Es2_PrintUsage( const eSLIM2_ParamStruct * p, int fLut )
+{
+    Abc_Print(-2, "usage: %s [-DIRSTVNZ <num>] %s[-civ0] [-1 <num>] [-h] [-/]\n", fLut ? "elslim2" : "&eslim2", fLut ? "[-G <num>] " : "");
+    Abc_Print(-2, "\t           high-effort %s optimization using SAT-based local improvement\n", fLut ? "LUT" : "AIG");
+    Abc_Print(-2, "\t-D <num> : mode: 0 = area, 1 = bounded depth, 2 = area then depth, 3 = depth [default = %d]\n", p->synthesis_approach);
+    if (fLut) Abc_Print(-2, "\t-G <num> : maximum LUT fanins, 2 to 6 [default = input network width]\n");
+    Abc_Print(-2, "\t-I <num> : maximum iterations per run/window; uses conflict budgets (0 = timed) [default = %u]\n", p->iterations);
+    Abc_Print(-2, "\t-N <num> : random seed [default = %d]\n", p->seed);
+    Abc_Print(-2, "\t-R <num> : runs sharing the overall time budget [default = %u]\n", p->nruns);
+    Abc_Print(-2, "\t-S <num> : maximum gates per cut [default = %u]\n", p->subcircuit_max_size);
+    Abc_Print(-2, "\t-T <num> : overall elapsed seconds, including fractional values [default = %g]\n", p->timeout);
+    Abc_Print(-2, "\t-V <num> : 0 = quiet, 1 = budget/result, 2 = counters, 3 = progress/details [default = %d]\n", p->verbosity_level);
+    Abc_Print(-2, "\t-Z <num> : maximum worker cores; 1 = serial [default = %u]\n", p->ncores);
+    Abc_Print(-2, "\t-c       : toggle critical-path root bias [default = %s]\n", p->critical_path_selection_bias ? "yes" : "no");
+    Abc_Print(-2, "\t-i       : toggle native rewriting and final processing [default = %s]\n", p->apply_inprocessing ? "yes" : "no");
+    Abc_Print(-2, "\t-v       : toggle exhaustive relations with SAT fallback [default = %s]\n", p->exhaustive_relations ? "yes" : "no");
+    Abc_Print(-2, "\t-0       : toggle heuristic early stopping [default = yes]\n");
+    Abc_Print(-2, "\t-1 <num> : evaluated cuts per root before retry/escalation [default = %u]\n", p->nselection_trials);
+    Abc_Print(-2, "\t-h       : print this usage\n");
+    Abc_Print(-2, "\t-/       : print all tuning options and extended guidance\n");
+    Abc_Print(-2, "\t\n\tUse conventional optimization first; map to LUTs before elslim2.\n");
+    Abc_Print(-2, "\tMode 1 guards the returned node and level counts against the input.\n");
+    Abc_Print(-2, "\tThe search stops at its limit or after trial budgets without a cost gain;\n");
+    Abc_Print(-2, "\tthis is heuristic termination, not a proof of global optimality.\n");
+    Abc_Print(-2, "\tIncrease -S cautiously: synthesis cost grows rapidly. Try -D 3 -c for depth.\n");
+    Abc_Print(-2, "\t-I with a nonbinding -T is repeatable on the same build and core count.\n");
+    Abc_Print(-2, "\tNative passes and individual SAT propagations may overrun a time limit.\n");
+    Abc_Print(-2, "\tExamples: %s\n", fLut ? "if -K 4; elslim2 -G 4 -T 300 -N 1" : "&eslim2 -v -T 300 -N 1");
+    Abc_Print(-2, "\t          %s -T 3600 -R 6 -N 1\n", fLut ? "elslim2" : "&eslim2");
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Optimizes the current AIG using the eSLIM2 package.]
+
+***********************************************************************/
+
+int Abc_CommandAbc9eSLIM2( Abc_Frame_t * pAbc, int argc, char ** argv ) {
+
+  eSLIM2_ParamStruct params;
+  int c = 0, fHelp = 0, fAdvanced = 0;
+  Gia_Man_t * pTemp;
+  seteSLIM2Params(&params);
+  params.aig = 1;
+  Extra_UtilGetoptReset();
+  while ( ( c = Extra_UtilGetopt( argc, argv, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz/01" ) ) != EOF ) {
+      switch ( c ) {
+        case '0': params.trial_limit_active ^= 1; break;
+        case '1':
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &params.nselection_trials) || !params.nselection_trials || params.nselection_trials > 1000000) goto usage;
+          break;
+        case 'v':
+          params.exhaustive_relations ^= 1;
+          break;
+        case 'w':
+          params.grow_mffcs ^= 1;
+          break;
+        case 'y':
+        case 'z':
+        {
+          unsigned Value;
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &Value)) goto usage;
+          if (Value > 16 || (c == 'z' && Value < 2)) goto usage;
+          if (c == 'y') params.preferred_outputs = Value;
+          else params.cut_input_limit = Value;
+          break;
+        }
+        case 'a':
+          params.cache_relations ^= 1;
+          break;
+        case 'b':
+          params.sample_relations ^= 1;
+          break;
+        case 'M':
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &params.area_phase_percent) || params.area_phase_percent > 90) goto usage;
+          break;
+        case 'E':
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &params.max_divisors) || params.max_divisors > 8) goto usage;
+          break;
+        case 'F':
+        case 'G':
+        case 'H':
+        case 'Y':
+        {
+          unsigned Value;
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &Value)) goto usage;
+          if ((c == 'F' || c == 'G') && Value > 64) goto usage;
+          if (c == 'H' && (!Value || Value > 16384)) goto usage;
+          if (c == 'Y' && (Value < 2 || Value > 1024)) goto usage;
+          if (c == 'F') params.relation_window_fanin = Value;
+          if (c == 'G') params.relation_window_fanout = Value;
+          if (c == 'H') params.relation_window_gates = Value;
+          if (c == 'Y') params.relation_window_inputs = Value;
+          break;
+        }
+        case 'o':
+          params.skip_optimal_cuts ^= 1;
+          break;
+        case 'r':
+          params.local_relations ^= 1;
+          break;
+        case 'O':
+          if (globalUtilOptind >= argc || !argv[globalUtilOptind][0])
+            goto usage;
+          params.checkpoint_prefix = argv[globalUtilOptind++];
+          break;
+        case 'K':
+          if (globalUtilOptind >= argc || !argv[globalUtilOptind][0])
+            goto usage;
+          params.checkpoint_times = argv[globalUtilOptind++];
+          break;
+        case 'n':
+          params.small_synthesis ^= 1;
+          break;
+        case 'd':
+          params.protect_neutral_depth ^= 1;
+          break;
+        case 'j':
+          params.refine_depth ^= 1;
+          break;
+        case 'p':
+          params.permute_cache ^= 1;
+          break;
+        case 'L':
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &params.depth_target_percent) || params.depth_target_percent > 100)
+            goto usage;
+          break;
+        case 'Q':
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &params.synthesis_solver_mode) || params.synthesis_solver_mode > 6)
+            goto usage;
+          break;
+        case 'k':
+          params.cache_synthesis ^= 1;
+          break;
+        case 'u':
+          params.synthesis_cegar ^= 1;
+          break;
+        case 'J':
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &params.rewrite_mode) || params.rewrite_mode > 6)
+            goto usage;
+          break;
+        case 'A':
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &params.aig_encoding) || params.aig_encoding > 3)
+            goto usage;
+          break;
+        case 'l':
+          params.initial_depth_bound ^= 1;
+          break;
+        case 'm':
+          params.mux_consensus ^= 1;
+          break;
+        case 'g':
+          params.fast_simulation ^= 1;
+          break;
+        case 'q':
+          params.tune_relation_solver ^= 1;
+          break;
+        case 'B':
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &params.synthesis_timeout_ms))
+            goto usage;
+          break;
+        case 'e':
+          params.compact_timing ^= 1;
+          break;
+        case 'C':
+          if (globalUtilOptind >= argc ||
+              !Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.relation_tfo_bound))
+            goto usage;
+          params.approximate_relation = 1;
+          if (globalUtilOptind < argc &&
+              (argv[globalUtilOptind][0] != '-' ||
+               (argv[globalUtilOptind][1] >= '0' && argv[globalUtilOptind][1] <= '9'))) {
+            if (!Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.relation_tfi_bound))
+              goto usage;
+            params.generate_relation_with_tfi_limit = 1;
+          }
+          break;
+        case 'D':
+          if (globalUtilOptind >= argc ||
+              !Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.synthesis_approach) ||
+              params.synthesis_approach > 3)
+            goto usage;
+          break;
+        case 'I':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-I\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          if ( !Es_ReadUnsigned(argv[globalUtilOptind], &params.iterations) )
+              goto usage;
+          globalUtilOptind++;
+          break;
+        case 'Z':
+          if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &params.ncores) || !params.ncores) {
+            Abc_Print( -1, "Command line switch \"-Z\" requires a positive integer core limit.\n" );
+            goto usage;
+          }
+          break;
+        case 'P':
+        {
+          char * pEnd;
+          const char * pText;
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-P\" should be followed by a probability.\n" );
+              goto usage;
+          }
+          pText = argv[globalUtilOptind++];
+          errno = 0;
+          params.expansion_probability = strtod(pText, &pEnd);
+          if (pText == pEnd || *pEnd || errno == ERANGE ||
+              !(params.expansion_probability > 0 && params.expansion_probability <= 1))
+              goto usage;
+          break;
+        }
+        case 'R':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-R\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          if ( !Es_ReadUnsigned(argv[globalUtilOptind], &params.nruns) )
+              goto usage;
+          globalUtilOptind++;
+          if ( params.nruns < 1 )
+              goto usage;
+          break;
+        case 'S':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-S\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          if ( !Es_ReadUnsigned(argv[globalUtilOptind], &params.subcircuit_max_size) )
+              goto usage;
+          globalUtilOptind++;
+          if ( params.subcircuit_max_size < 2 )
+              goto usage;
+          break;
+        case 'T':
+        case 'U':
+        {
+          char * pEnd;
+          const char * pText;
+          double Value;
+          if (globalUtilOptind >= argc) goto usage;
+          pText = argv[globalUtilOptind++];
+          errno = 0;
+          Value = strtod(pText, &pEnd);
+          if (pText == pEnd || *pEnd || errno == ERANGE ||
+              !(Value > 0 && Value <= (c == 'T' ? (double)UINT_MAX : (double)INT_MAX))) goto usage;
+          if (c == 'T') params.timeout = Value;
+          else params.relation_generation_timeout = Value;
+          break;
+        }
+        case 'V':
+          if (globalUtilOptind >= argc ||
+              !Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.verbosity_level) ||
+              params.verbosity_level > 3)
+            goto usage;
+          break;
+        case 'W':
+        {
+          unsigned int nWindows, nSize;
+          if ( globalUtilOptind + 1 >= argc)
+          {
+              Abc_Print( -1, "Command line switch \"-W\" should be followed by two integers.\n" );
+              goto usage;
+          }
+          if (!Es_ReadUnsigned(argv[globalUtilOptind++], &nWindows) || !nWindows || nWindows > INT_MAX ||
+              !Es_ReadUnsigned(argv[globalUtilOptind++], &nSize) || !nSize || nSize > INT_MAX)
+            goto usage;
+          params.nWindows = (int)nWindows;
+          params.window_size = (int)nSize;
+          break;
+        }
+        case 'X':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-X\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          if ( !Es_ReadUnsigned(argv[globalUtilOptind], &params.additional_gates) )
+              goto usage;
+          globalUtilOptind++;
+          break;
+        case 'N':
+        {
+          char * pEnd;
+          const char * pText;
+          long Seed;
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-N\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          pText = argv[globalUtilOptind++];
+          errno = 0;
+          Seed = strtol(pText, &pEnd, 10);
+          if (pText == pEnd || *pEnd || errno == ERANGE || Seed < INT_MIN || Seed > INT_MAX)
+              goto usage;
+          params.fix_seed = 1;
+          params.seed = (int)Seed;
+          break;
+        }
+        case 'c' :
+          params.critical_path_selection_bias ^= 1;
+          break;
+        case 'f' :
+          params.forward_search ^= 1;
+          break;
+        case '/': fAdvanced = 1; fHelp = 1; goto usage;
+        case 'h': fHelp = 1; goto usage;
+        case 'i' :
+          params.apply_inprocessing ^= 1;
+          break;
+        case 's' :
+          params.fill_subcircuits ^= 1;
+          break;
+        case 't' :
+          params.use_taboo_list ^= 1;
+          break;
+        case 'x' :
+          params.aig ^= 1;
+          break;
+        default:
+          goto usage;
+      }
+  }
+  if (globalUtilOptind != argc)
+    goto usage;
+  if ((params.nWindows > 0 || params.ncores > 1) && params.synthesis_approach > 1) {
+    Abc_Print( -1, "Parallel windows require -D 0 (area) or -D 1 (area with a depth bound).\n" );
+    return 1;
+  }
+  if (params.synthesis_approach == 1 && !params.aig) {
+    Abc_Print( -1, "Mode 1 requires AND gates; -x counts XOR nodes rather than their exported AIG cost.\n" );
+    return 1;
+  }
+  if ( Abc_FrameReadGia(pAbc) == NULL ) {
+        Abc_Print( -1, "There is no AIG.\n" );
+        return 1;
+  }
+
+  pTemp = applyeSLIM2(Abc_FrameReadGia(pAbc), &params);
+  if (pTemp == NULL) {
+    Abc_Print( -1, "eSLIM2 could not process the given circuit.\n" );
+    return 1;
+  }
+
+  Abc_FrameUpdateGia( pAbc, pTemp );
+  return 0;
+
+
+  usage:
+    if (!fHelp) {
+      if (c != EOF) Abc_Print(-1, "&eslim2: invalid or missing argument for -%c near '%s'.\n", c, argv[globalUtilOptind > 1 ? globalUtilOptind - 1 : 0]);
+      else Abc_Print(-1, "&eslim2: unexpected argument '%s'.\n", argv[globalUtilOptind]);
+    }
+    seteSLIM2Params(&params);
+    if (!fAdvanced) { Es2_PrintUsage(&params, 0); return 1; }
+    Abc_Print( -2, "usage: &eslim2 [-0] [-1 <num>] [-ABCDEFGHIJLMNPQRSTUVWXYZyz <num>] [-K <seconds,...>] [-O <prefix>] [-abcdefghijklmnopqrstuvwx]\n" );
+    Abc_Print( -2, "\t           circuit optimization using exact synthesis and the SAT-based local improvement method (SLIM)\n" );
+    Abc_Print( -2, "\t           Default mode 1 optimizes area under a depth bound.\n" );
+    Abc_Print( -2, "\t           Relations use SAT by default; -v adds exhaustive simulation in eligible contexts.\n" );
+    Abc_Print( -2, "\t-0       : toggle heuristic early stopping [default = yes]\n" );
+    Abc_Print( -2, "\t-1 <num> : evaluated cuts per root before retry/escalation [default = %u]\n", params.nselection_trials );
+    Abc_Print( -2, "\t-A <num> : AIG encoding in modes 0/1: 0 = generic, 1 = ordered pins, 2/3 = ordered pins and gates [default = %u]\n", params.aig_encoding );
+    Abc_Print( -2, "\t           Encoding 2 also prunes redundant structures in area mode; 3 extends this pruning to mode 1.\n" );
+    Abc_Print( -2, "\t-B <num> : base synthesis budget per size in milliseconds for modes 0/1 (0 = legacy allocation) [default = %u]\n", params.synthesis_timeout_ms );
+    Abc_Print( -2, "\t           Above 5 gates, reduction queries receive 4x; otherwise existing-size queries receive 4x.\n" );
+    Abc_Print( -2, "\t           LUT search requests one fewer gate first and excludes the present equal-size cut embedding.\n" );
+    Abc_Print( -2, "\t-C <m> [n]: bound fallback relation fanout to m levels, optionally fanin to n [default = unbounded]\n");
+    Abc_Print( -2, "\t           -C restricts the SAT context only when local relations are disabled with -r.\n" );
+    Abc_Print( -2, "\t-D <num> : delay mode: 0 = area, 1 = area with depth bound, 2 = area then depth, 3 = depth [default = %d]\n",  params.synthesis_approach );
+    Abc_Print( -2, "\t           Mode 1 keeps both exported AIG node count and level count at most their input values.\n" );
+    Abc_Print( -2, "\t           Area mode (0), including windows, may increase levels. Use mode 1 to preserve the input bound.\n" );
+    Abc_Print( -2, "\t-E <num> : extra existing divisors per cut (0 to 8; respects -z) [default = %u]\n", params.max_divisors );
+    Abc_Print( -2, "\t-F <num> : local context fanin levels (0 to 64) [default = %u]\n", params.relation_window_fanin );
+    Abc_Print( -2, "\t-G <num> : local context fanout levels (0 to 64) [default = %u]\n", params.relation_window_fanout );
+    Abc_Print( -2, "\t-H <num> : local context gate limit (1 to 16384) [default = %u]\n", params.relation_window_gates );
+    Abc_Print( -2, "\t-I <num> : the maximal iterations per run (0 = no limit) [default = %u]\n",  params.iterations  );
+    Abc_Print( -2, "\t           With -I, nominal milliseconds become 100 conflicts each; -U seconds become 100000 conflicts each.\n" );
+    Abc_Print( -2, "\t-J <num> : AIG rewrite policy, 0 to 6 [default = %u]\n", params.rewrite_mode );
+    Abc_Print( -2, "\t           5 compresses, balances toward -L and recovers area, initially every 10 seconds.\n" );
+    Abc_Print( -2, "\t           6 uses area-oriented choice mapping within the active depth bound, initially every 5 seconds.\n" );
+    Abc_Print( -2, "\t           0 disables rewriting; 1 is initial and 2 adaptive rewriting in mode 1.\n" );
+    Abc_Print( -2, "\t           3 is periodic rewriting in modes 0/1; 4 also tries resubstitution every fifth rewrite.\n" );
+    Abc_Print( -2, "\t           Adaptive starts at 2 seconds only if the initial pass removed nodes.\n" );
+    Abc_Print( -2, "\t           No-gain native calls back off, using measured cost; SAT gains do not reset this backoff.\n" );
+    Abc_Print( -2, "\t           Rewriting is skipped with 2 seconds or less remaining; measured pass times can increase this reserve.\n" );
+    Abc_Print( -2, "\t           Rewriting preserves size and the active mode-1 bound from -L/-l, not necessarily current depth.\n" );
+    Abc_Print( -2, "\t           Windows disable -J and strash in both modes; -i controls final inprocessing.\n" );
+    Abc_Print( -2, "\t-K <seconds,...> : strictly increasing checkpoint times, at most -T (requires -O)\n" );
+    Abc_Print( -2, "\t           Both options are required; supported for serial AIG modes 0/1 with -R 1.\n" );
+    Abc_Print( -2, "\t           Files are <prefix>.<seconds>s.aig/.json; existing files are never overwritten.\n" );
+    Abc_Print( -2, "\t           Intermediate snapshots precede any final inprocessing; the -T snapshot follows processing or its skip.\n" );
+    Abc_Print( -2, "\t-L <num> : protect depth gains down to this percentage of input levels in mode 1 (0 = off) [default = %u]\n", params.depth_target_percent );
+    Abc_Print( -2, "\t           Uses the larger of current depth and this target; further gains may be traded for area. Overrides -l.\n" );
+    Abc_Print( -2, "\t           Windows use their frozen boundary depth bound instead; -L applies only to serial search.\n" );
+    Abc_Print( -2, "\t-M <num> : initial area phase, percent of budget (0 to 90) [default = %u]\n", params.area_phase_percent );
+    Abc_Print( -2, "\t           Serial AIG mode 1 with -R 1 and -T >= 4; restores the original -L target afterward.\n" );
+    Abc_Print( -2, "\t-N <num> : random seed [default = 1]\n" );
+    Abc_Print( -2, "\t-O <prefix> : save AIG checkpoints and JSON timing records without stopping the search\n" );
+    Abc_Print( -2, "\t-P <num> : the probability of expanding a node [default = %.2f]\n", params.expansion_probability );
+    Abc_Print( -2, "\t-Q <num> : synthesis SAT: 0..5 = CaDiCaL settings, 6 = Glucose3 [default = %u]\n", params.synthesis_solver_mode );
+    Abc_Print( -2, "\t           CaDiCaL: 0 = default, 1 = no lucky phases, 2 = plain, 3 = sat, 4 = unsat, 5 = negative phase.\n" );
+    Abc_Print( -2, "\t-R <num> : the number of runs of eSLIM2 + Inprocessing [default = %u]\n",    params.nruns );
+    Abc_Print( -2, "\t-S <num> : the maximal size of considered subcircuits [default = %u]\n",    params.subcircuit_max_size );
+    Abc_Print( -2, "\t-T <num> : overall time budget in seconds (fractional seconds allowed) [default = %g]\n",    params.timeout );
+    Abc_Print( -2, "\t-U <num> : relation SAT seconds per context (fractional allowed) [default = %g]\n", params.relation_generation_timeout );
+    Abc_Print( -2, "\t           Incomplete local relations retry smaller contexts, down to the cut plus divisor gates.\n" );
+    Abc_Print( -2, "\t           Reuse successful context caps until the graph changes; every 32nd fresh relation probes full caps.\n" );
+    Abc_Print( -2, "\t-V <num> : the verbosity level [default = %d]\n",       params.verbosity_level);
+    Abc_Print( -2, "\t           Level 0 is quiet, 1 prints the budget and result, 2 adds counters, 3 adds progress/details.\n" );
+    Abc_Print( -2, "\t-W <m> <n>: select up to m windows of n nodes [default = automatic with -Z > 1]\n" );
+    Abc_Print( -2, "\t           Windows share the -T budget and use at most -Z cores; -I applies per window.\n" );
+    Abc_Print( -2, "\t-X <num> : the maximal number of additional gates that may be used for depth optimization [default = %u]\n", params.additional_gates);
+    Abc_Print( -2, "\t-Y <num> : local context input limit (2 to 1024) [default = %u]\n", params.relation_window_inputs );
+    Abc_Print( -2, "\t           Context growth stops at these limits; the selected cut is always retained.\n" );
+    Abc_Print( -2, "\t-Z <num> : maximum number of worker cores; 1 uses serial search [default = %u]\n", params.ncores );
+    Abc_Print( -2, "\t           More cores use automatic windows in modes 0/1; small designs may use fewer.\n" );
+    Abc_Print( -2, "\t-a       : toggle caching complete local relations until the graph changes [default = %s]\n", params.cache_relations ? "yes" : "no" );
+    Abc_Print( -2, "\t           Relation caching is limited to 10 cut inputs and 6 outputs, independently of -z.\n" );
+    Abc_Print( -2, "\t-b       : toggle sampled witnesses for early optimality checks and relation SAT [default = %s]\n", params.sample_relations ? "yes" : "no" );
+    Abc_Print( -2, "\t-c       : toggle bias for selection of nodes on the critical path [default = %s]\n", params.critical_path_selection_bias ? "yes" : "no" );
+    Abc_Print( -2, "\t           With -L, disable critical-path bias after reaching the depth target.\n" );
+    Abc_Print( -2, "\t-d       : toggle preserving current depth for equal-area replacements in mode 1 [default = %s]\n", params.protect_neutral_depth ? "yes" : "no" );
+    Abc_Print( -2, "\t           The depth bound is controlled by -L or -l; this toggle only tightens equal-area replacements.\n" );
+    Abc_Print( -2, "\t-e       : toggle compact encoding of the depth bound in mode 1 [default = %s]\n", params.compact_timing ? "yes" : "no" );
+    Abc_Print( -2, "\t-f       : toggle forward expansion of root nodes [default = %s]\n", params.forward_search ? "yes" : "no" );
+    Abc_Print( -2, "\t-g       : toggle fast gate evaluation and Gray-code traversal for sampled witnesses [default = %s]\n", params.fast_simulation ? "yes" : "no" );
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    Abc_Print( -2, "\t-i       : toggle in-loop rewriting and final inprocessing [default = %s]\n", params.apply_inprocessing ? "yes" : "no" );
+    Abc_Print( -2, "\t           Final processing reserves estimated cost, updated from measured prior calls.\n" );
+    Abc_Print( -2, "\t           The reservation is capped at half of the remaining run budget; mode 0 reserves its native minimum.\n" );
+    Abc_Print( -2, "\t           Native passes cannot be interrupted; actual elapsed time may exceed the requested budget.\n" );
+    Abc_Print( -2, "\t-j       : toggle reducing replacement depth after area search in mode 1 [default = %s]\n", params.refine_depth ? "yes" : "no" );
+    Abc_Print( -2, "\t           With -L, refine critical cuts only until the target is reached; -L 0 refines all cuts.\n" );
+    Abc_Print( -2, "\t-k       : toggle caching proven minimum replacements in modes 0/1 [default = %s]\n", params.cache_synthesis ? "yes" : "no" );
+    Abc_Print( -2, "\t-l       : toggle keeping the initial depth bound throughout mode 1 [default = %s]\n", params.initial_depth_bound ? "yes" : "no" );
+    Abc_Print( -2, "\t           With this enabled, intermediate depth gains may be traded for area within the input depth.\n" );
+    Abc_Print( -2, "\t-m       : toggle redundant mux clauses for two-input gates [default = %s]\n", params.mux_consensus ? "yes" : "no" );
+    Abc_Print( -2, "\t-n       : toggle exact small enumeration (3 ANDs for up to 6 inputs; 2 ANDs for 7-10 inputs) [default = %s]\n", params.small_synthesis ? "yes" : "no" );
+    Abc_Print( -2, "\t-o       : toggle skipping cuts proven optimal in area and every output arrival [default = %s]\n", params.skip_optimal_cuts ? "yes" : "no" );
+    Abc_Print( -2, "\t-p       : toggle equivalent input permutations of cached replacements in mode 1 [default = %s]\n", params.permute_cache ? "yes" : "no" );
+    Abc_Print( -2, "\t-q       : toggle relation SAT tuning (disable preprocessing/lucky phases) [default = %s]\n", params.tune_relation_solver ? "yes" : "no" );
+    Abc_Print( -2, "\t-r       : toggle bounded local relations [default = %s]\n", params.local_relations ? "yes" : "no" );
+    Abc_Print( -2, "\t-s       : toggle filling subcircuits with previously rejected gates [default = %s]\n", params.fill_subcircuits ? "yes" : "no" );
+    Abc_Print( -2, "\t-t       : toggle use taboo list [default = %s]\n", params.use_taboo_list ? "yes" : "no" );
+    Abc_Print( -2, "\t           Revisits changed neighborhoods and backs off optimal or unchanged roots.\n" );
+    Abc_Print( -2, "\t-u       : toggle counterexample refinement in modes 0/1 [default = %s]\n", params.synthesis_cegar ? "yes" : "no" );
+    Abc_Print( -2, "\t-v       : toggle exhaustive relations with SAT fallback [default = %s]\n", params.exhaustive_relations ? "yes" : "no" );
+    Abc_Print( -2, "\t-w       : toggle MFFC fanin growth preserving the cut outputs [default = %s]\n", params.grow_mffcs ? "yes" : "no" );
+    Abc_Print( -2, "\t-x       : toggle XOR gates in modes 0/2/3 (mode 1 rejects XORs) [default = no]\n" );
+    Abc_Print( -2, "\t-y <num> : preferred cut outputs (0 = ordinary selection; 1 to 16) [default = %u]\n", params.preferred_outputs );
+    Abc_Print( -2, "\t           With -y > 0, three of four selections grow related exits; -w separately enables MFFC growth.\n" );
+    Abc_Print( -2, "\t           Try up to eight candidates, then use the closest available boundary; -y 0 leaves -w unchanged.\n" );
+    Abc_Print( -2, "\t-z <num> : maximum cut inputs including divisors (2 to 16) [default = %u]\n", params.cut_input_limit );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tDescription:\n" );
+    Abc_Print( -2, "\t    &eslim2 is a high-effort area/depth optimization command for AIGs.\n" );
+    Abc_Print( -2, "\t    It targets already optimized circuits; run standard ABC optimization\n" );
+    Abc_Print( -2, "\t    first on unoptimized inputs. For LUT networks, see elslim or elslim2.\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tTermination:\n" );
+    Abc_Print( -2, "\t    Search stops at the overall time budget (-T), the iteration limit (-I),\n" );
+    Abc_Print( -2, "\t    or after exhausted work with no interrupted queries pending. Stalls retry larger budgets/cuts.\n" );
+    Abc_Print( -2, "\t    -R runs share one -T budget; -I applies per run, or per window with -W.\n" );
+    Abc_Print( -2, "\t    Allow minutes to hours for high effort; gains usually diminish over time.\n" );
+    Abc_Print( -2, "\t    Native inprocessing may finish after the requested time budget.\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tPerformance considerations:\n" );
+    Abc_Print( -2, "\t    Larger relation contexts and replacement subcircuits cost more per\n" );
+    Abc_Print( -2, "\t    iteration. Start with the default bounded local relations; for large\n" );
+    Abc_Print( -2, "\t    designs, tune -F/-G/-H/-Y or use -W windows in modes 0/1.\n" );
+    Abc_Print( -2, "\t    -C bounds the relation context only when local relations are disabled\n" );
+    Abc_Print( -2, "\t    with -r. Try -v for eligible small-support contexts; others still use SAT.\n" );
+    Abc_Print( -2, "\t    Larger -S cuts offer more opportunities but require harder synthesis;\n" );
+    Abc_Print( -2, "\t    smaller cuts are faster but can miss improvements. Start with the default.\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tCombining with other commands:\n" );
+    Abc_Print( -2, "\t    Keep native rewriting and final inprocessing enabled (-i toggles them).\n" );
+    Abc_Print( -2, "\t    They expose opportunities between SAT searches; -J selects the rewrite\n" );
+    Abc_Print( -2, "\t    policy in modes 0/1. Multiple shorter runs can also help: -T 3600 -R 6\n" );
+    Abc_Print( -2, "\t    divides one hour among six runs, including their final inprocessing.\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tDepth optimization:\n" );
+    Abc_Print( -2, "\t    Default mode 1 reduces area under a depth bound; -L protects depth gains\n" );
+    Abc_Print( -2, "\t    down to its target. Mode 0 may increase depth. Prefer mode 1 initially\n" );
+    Abc_Print( -2, "\t    when both area and depth matter, before paying for mode 2's extra SAT calls.\n" );
+    Abc_Print( -2, "\t    -D 2 minimizes replacement size, then depth among minimum-size choices.\n" );
+    Abc_Print( -2, "\t    -D 3 prioritizes replacement depth; try -c to bias critical-path cuts.\n" );
+    Abc_Print( -2, "\t    Leave -X at 0 to avoid allowing extra replacement gates for depth gains.\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tRecommended settings:\n" );
+    Abc_Print( -2, "\t    Forward expansion and the taboo list are already enabled; -f and -t\n" );
+    Abc_Print( -2, "\t    toggle them off. The default seed is 1; -N changes it and -Z sets the worker-core limit.\n" );
+    Abc_Print( -2, "\t    Examples (after loading an AIG into the &-space):\n" );
+    Abc_Print( -2, "\t    &eslim2 -v -T 300 -N 1 -Z 1\n" );
+    Abc_Print( -2, "\t    &eslim2 -T 3600 -R 6 -N 1\n" );
+    Abc_Print( -2, "\t    &eslim2 -D 3 -c -T 1800 -N 1\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tReferences:\n" );
+    Abc_Print( -2, "\t    Based on eSLIM by Franz-Xaver Reichl, University of Freiburg; extended by ABC contributors.\n" );
+    Abc_Print( -2, "\t    F.-X. Reichl, F. Slivovsky, S. Szeider.\n" );
+    Abc_Print( -2, "\t    \"eSLIM: Circuit Minimization with SAT Based Local Improvement\"\n" );
+    Abc_Print( -2, "\t    F.-X. Reichl, C. Scholl.\n" );
+    Abc_Print( -2, "\t    \"Delay-Constrained Area Optimisation Using SAT-Based Local Improvement\"\n" );
+
+    return 1;
+
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Handles exact optimization of LUT networks.]
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+int Abc_CommandAbc9elSLIM( Abc_Frame_t * pAbc, int argc, char ** argv ) {
+  extern void seteSLIMParams(eSLIM_ParamStruct* params);
+  extern Abc_Ntk_t* applyelSLIM(Abc_Ntk_t * pGia, const eSLIM_ParamStruct* params);
+  
+  eSLIM_ParamStruct params;
+  Abc_Ntk_t* pNtk, *pNtknew;
+  int c;
+  seteSLIMParams(&params);
+  Extra_UtilGetoptReset();
+  params.subcircuit_max_size = 4;
+  while ( ( c = Extra_UtilGetopt( argc, argv, "CDGIPRSTVWXZcfhist" ) ) != EOF ) {
+      switch ( c ) {
+        case 'C':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-C\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.approximate_relation = 1;
+          params.relation_tfo_bound  = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.relation_tfo_bound < 0 )
+              goto usage;
+          if (globalUtilOptind < argc) {
+            char *next;
+            int tfi_bound = strtol (argv[globalUtilOptind], &next, 10);
+            if (argv[globalUtilOptind] != next && *next == '\0') {
+              params.generate_relation_with_tfi_limit = 1;
+              params.relation_tfi_bound = tfi_bound;
+              globalUtilOptind++;
+              if (params.relation_tfi_bound < 0) {
+                goto usage;
+              }
+            }
+          }
+          break;
+        case 'D':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-D\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.synthesis_approach = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.synthesis_approach < 0 ||  params.synthesis_approach > 3)
+              goto usage;
+          break;
+        case 'I':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-I\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.iterations = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.iterations < 0 )
+              goto usage;
+          break;
+        case 'G':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-G\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.gate_size = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.gate_size < 1 || params.gate_size > 6 )
+              goto usage;
+          break;
+        case 'P':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-P\" should be followed by a float.\n" );
+              goto usage;
+          }
+          params.expansion_probability = atof(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.expansion_probability <= 0 || params.expansion_probability > 1)
+              goto usage;
+          break;
+        case 'R':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-R\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.nruns = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.nruns < 1 )
+              goto usage;
+          break;
+        case 'S':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-S\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.subcircuit_max_size = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.subcircuit_max_size < 2 )
+              goto usage;
+          break;
+        case 'T':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-T\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.timeout = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.timeout < 1 )
+              goto usage;
+          break;
+        case 'V':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-V\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.verbosity_level = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if ( params.verbosity_level < 0 || params.verbosity_level > 3 )
+              goto usage;
+          break;
+        case 'W':
+          if ( globalUtilOptind + 1 >= argc)
+          {
+              Abc_Print( -1, "Command line switch \"-W\" should be followed by two integers.\n" );
+              goto usage;
+          }
+          params.nWindows = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          if (params.nWindows <= 0) 
+            goto usage;
+          params.window_size = atoi(argv[globalUtilOptind]);
+          if (params.window_size <= 0)
+            goto usage;
+          globalUtilOptind++;
+          break;
+        case 'X':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-X\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.additional_gates = atoi(argv[globalUtilOptind]);
+          if ( params.additional_gates < 0 )
+              goto usage;
+          globalUtilOptind++;
+          break;
+        case 'Z':
+          if ( globalUtilOptind >= argc )
+          {
+              Abc_Print( -1, "Command line switch \"-Z\" should be followed by an integer.\n" );
+              goto usage;
+          }
+          params.fix_seed = 1;
+          params.seed = atoi(argv[globalUtilOptind]);
+          globalUtilOptind++;
+          break;
+        case 'c' :
+          params.criticial_path_selection_bias ^= 1;
+          break;
+        case 'f' :
+          params.forward_search ^= 1;
+          break;
+        case 'h':
+          goto usage;
+        case 'i' :
+          params.apply_inprocessing ^= 1;
+          break;
+        case 's' :
+          params.fill_subcircuits ^= 1;
+          break;
+        case 't' :
+          params.use_taboo_list ^= 1;
+          break;
+        default:
+          goto usage;
+      }
+  }
+  if (params.nWindows > 0 && params.synthesis_approach != 0) {
+    Abc_Print( -1, "Windows can only be used with area minimization\n" );
+    return 1;
+  }
+
+  pNtk = Abc_FrameReadNtk(pAbc);
+  if ( pNtk == NULL )
+  {
+    Abc_Print( -1, "Empty network.\n" );
+    return 1;
+  }
+  if ( !Abc_NtkIsLogic(pNtk) )
+  {
+    Abc_Print( -1, "This command can only be applied to a logic network.\n" );
+    return 1;
+  }
+  if (!Abc_NtkHasSop(pNtk)) {
+    Abc_NtkToSop( pNtk, -1, ABC_INFINITY );
+  }
+
+
+  params.aig = 0;
+  pNtknew = applyelSLIM(pNtk, &params);
+  if (pNtknew == NULL) {
+    Abc_Print( -1, "eSLIM could not process the given circuit.\n" );
+    return 1;
+  }
+  Abc_FrameReplaceCurrentNetwork( pAbc, pNtknew );
+    
+  return 0;
+
+  usage:
+    seteSLIMParams(&params); // show the correct default values
+    params.subcircuit_max_size = 4;
+    Abc_Print( -2, "usage: elslim [-CDGIPRSTVWXZ <num>] [-cfhist]\n" );
+    Abc_Print( -2, "\t           LUT optimization using exact synthesis and the SAT-based local improvement method (SLIM)\n" );
+    Abc_Print( -2, "\t-C <m> [n]: bound relation fanout to m levels, optionally fanin to n [default = unbounded]\n" );
+    Abc_Print( -2, "\t-D <num> : delay mode: 0 = area, 1 = area with depth bound, 2 = area then depth, 3 = depth [default = %d]\n", params.synthesis_approach );
+    Abc_Print( -2, "\t-G <num> : the maximal number of fanins gates may use (at most 6) [default = %d]\n",  params.gate_size  );
+    Abc_Print( -2, "\t-I <num> : the maximal number of iterations (0 = no limit) for the individual eSLIM runs [default = %d]\n",  params.iterations  );
+    Abc_Print( -2, "\t-P <num> : the probability of expanding a node [default = %.2f]\n",    params.expansion_probability );
+    Abc_Print( -2, "\t-R <num> : the number of runs of eSLIM + Inprocessing [default = %d]\n",    params.nruns );
+    Abc_Print( -2, "\t-S <num> : the maximal size of considered subcircuits [default = %d]\n",    params.subcircuit_max_size );
+    Abc_Print( -2, "\t-T <num> : the timeout in seconds for the individual eSLIM runs [default = %d]\n",    params.timeout );
+    Abc_Print( -2, "\t-V <num> : the verbosity level [default = %d]\n",       params.verbosity_level);
+    Abc_Print( -2, "\t-W <m> <n>: use m windows of n nodes, only in mode 0 [default = %d, %d]\n", params.nWindows, params.window_size );
+    Abc_Print( -2, "\t-X <num> : the maximal number of additional gates that may be used for depth optimization [default = %d]\n", params.additional_gates);
+    Abc_Print( -2, "\t-Z <num> : use a fixed seed [default = random]\n" );
+    Abc_Print( -2, "\t-c       : toggle bias for selection of nodes on the critical path [default = %s]\n", params.criticial_path_selection_bias ? "yes" : "no" );
+    Abc_Print( -2, "\t-f       : toggle forward expansion of root nodes [default = %s]\n", params.forward_search ? "yes" : "no" );
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    Abc_Print( -2, "\t-i       : toggle LUT inprocessing in mode 0 [default = %s]\n", params.apply_inprocessing ? "yes" : "no" );
+    Abc_Print( -2, "\t-s       : toggle filling subcircuits [default = %s]\n", params.fill_subcircuits ? "yes" : "no" );
+    Abc_Print( -2, "\t-t       : toggle using the taboo list [default = %s]\n", params.use_taboo_list ? "yes" : "no" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tDescription:\n");
+    Abc_Print( -2, "\t    elslim is a high-effort LUT optimization command, targeting networks\n" );
+    Abc_Print( -2, "\t    already optimized with standard ABC commands. Map the input to LUTs\n" );
+    Abc_Print( -2, "\t    first, and set -G to the intended replacement LUT width; for example,\n" );
+    Abc_Print( -2, "\t    use if -K 4 followed by elslim -G 4. Inputs must be combinational and\n" );
+    Abc_Print( -2, "\t    have at most six fanins per node. For AIG optimization, see &eslim2.\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tTermination:\n" );
+    Abc_Print( -2, "\t    Each run stops at its time (-T) or iteration (-I) limit and returns\n" );
+    Abc_Print( -2, "\t    the optimized network. -T applies separately to each of the -R runs;\n" );
+    Abc_Print( -2, "\t    unlike &eslim2, -T 600 -R 6 requests six ten-minute runs.\n" );
+    Abc_Print( -2, "\t    SAT calls and native inprocessing can finish after the requested limit.\n" );
+    Abc_Print( -2, "\t    Allow minutes to hours for high effort; gains usually diminish over time.\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tPerformance considerations:\n" );
+    Abc_Print( -2, "\t    Larger networks and relation cones cost more per iteration. For large\n" );
+    Abc_Print( -2, "\t    designs, restrict relation computation with -C, or optimize windows\n" );
+    Abc_Print( -2, "\t    with -W in area mode (-D 0). Windows are unavailable in modes 1/2/3.\n" );
+    Abc_Print( -2, "\t    Larger -S cuts offer more improvement opportunities but harder SAT\n" );
+    Abc_Print( -2, "\t    synthesis; smaller cuts may miss useful replacements. Start with the\n" );
+    Abc_Print( -2, "\t    default maximum of four LUTs per cut. Wider LUTs make synthesis harder.\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tCombining with other commands:\n" );
+    Abc_Print( -2, "\t    In area mode, elslim runs native LUT optimization (mfs) after each\n" );
+    Abc_Print( -2, "\t    search; keep it enabled unless needed otherwise (-i toggles it).\n" );
+    Abc_Print( -2, "\t    Multiple shorter area runs can help by alternating SAT search and mfs:\n" );
+    Abc_Print( -2, "\t    try -T 600 -R 6 instead of one -T 3600 run. Modes 1/2/3 do not run\n" );
+    Abc_Print( -2, "\t    native LUT inprocessing; -R still repeats their SAT searches.\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tDepth optimization:\n" );
+    Abc_Print( -2, "\t    Default mode 0 reduces LUT count and may increase depth. Use -D 1\n" );
+    Abc_Print( -2, "\t    to search for area reductions under a depth bound. Start with mode 1\n" );
+    Abc_Print( -2, "\t    when depth matters, before paying for mode 2's extra SAT calls.\n" );
+    Abc_Print( -2, "\t    -D 2 minimizes replacement size, then depth among minimum-size choices.\n" );
+    Abc_Print( -2, "\t    -D 3 prioritizes replacement depth; try -c to bias critical-path cuts.\n" );
+    Abc_Print( -2, "\t    Leave -X at 0 to avoid allowing extra replacement LUTs for depth gains.\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tRecommended settings:\n" );
+    Abc_Print( -2, "\t    Try -t and -f to enable the taboo list and forward expansion; both are\n" );
+    Abc_Print( -2, "\t    off by default in elslim. Use -Z for a fixed seed.\n" );
+    Abc_Print( -2, "\t    Examples (after loading the input network):\n" );
+    Abc_Print( -2, "\t    if -K 4; elslim -G 4 -T 600 -R 6 -t -f -Z 1\n" );
+    Abc_Print( -2, "\t    if -K 6; elslim -G 6 -D 1 -T 1800 -t -f -Z 1\n" );
+    Abc_Print( -2, "\t\n" );
+    Abc_Print( -2, "\tReferences:\n" );
+    Abc_Print( -2, "\t    This command was contributed by Franz-Xaver Reichl (University of Freiburg).\n" );
+    Abc_Print( -2, "\t    F.-X. Reichl, F. Slivovsky, S. Szeider.\n" );
+    Abc_Print( -2, "\t    \"eSLIM: Circuit Minimization with SAT Based Local Improvement\"\n" );
+    Abc_Print( -2, "\t    F.-X. Reichl, C. Scholl.\n" );
+    Abc_Print( -2, "\t    \"Delay-Constrained Area Optimisation Using SAT-Based Local Improvement\"\n" );
+
+    return 1;
+
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Sets LUT-command defaults for the consolidated eSLIM2 engine.]
+
+***********************************************************************/
+static void Es2_SetLutParams( eSLIM2_ParamStruct * pPars )
+{
+    seteSLIM2Params( pPars );
+    pPars->aig = 0;
+    pPars->gate_size = 0; // Infer from the input network after parsing.
+    pPars->subcircuit_max_size = 4;
+    pPars->rewrite_mode = 5;
+    pPars->exhaustive_relations = 1;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Optimizes LUT networks using the consolidated eSLIM2 engine.]
+
+  Description [Cloned from elslim, with -G for LUT width and common -N seed/-Z cores.
+  The original command and engine remain independent.]
+
+***********************************************************************/
+int Abc_CommandAbc9elSLIM2( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    eSLIM2_ParamStruct params;
+    Abc_Ntk_t * pNtk, * pNtknew;
+    int c = 0, fHelp = 0, fAdvanced = 0;
+    Es2_SetLutParams( &params );
+    Extra_UtilGetoptReset();
+    while ( (c = Extra_UtilGetopt(argc, argv, "BCDEGIJLNPQRSTUVWXZcfhijrstvz/01")) != EOF )
+    {
+        switch ( c )
+        {
+        case '0': params.trial_limit_active ^= 1; break;
+        case '1':
+            if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &params.nselection_trials) || !params.nselection_trials || params.nselection_trials > 1000000) goto usage;
+            break;
+        case 'C':
+            if (globalUtilOptind >= argc || !Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.relation_tfo_bound))
+                goto usage;
+            params.approximate_relation = 1;
+            if (globalUtilOptind < argc && argv[globalUtilOptind][0] != '-')
+            {
+                if (!Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.relation_tfi_bound))
+                    goto usage;
+                params.generate_relation_with_tfi_limit = 1;
+            }
+            break;
+        case 'D':
+            if (globalUtilOptind >= argc || !Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.synthesis_approach) || params.synthesis_approach > 3)
+                goto usage;
+            break;
+        case 'G':
+            if (globalUtilOptind >= argc || !Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.gate_size) || params.gate_size < 2 || params.gate_size > 6)
+                goto usage;
+            break;
+        case 'B':
+        case 'E':
+        case 'I':
+        case 'J':
+        case 'L':
+        case 'Q':
+        case 'R':
+        case 'S':
+        case 'X':
+        case 'z':
+        case 'Z':
+        {
+            unsigned Value;
+            if (globalUtilOptind >= argc || !Es_ReadUnsigned(argv[globalUtilOptind++], &Value))
+                goto usage;
+            if (c == 'B') params.synthesis_timeout_ms = Value;
+            if (c == 'E') { if (Value > 8) goto usage; params.max_divisors = Value; }
+            if (c == 'I') params.iterations = Value;
+            if (c == 'J') { if (Value > 6) goto usage; params.rewrite_mode = Value; }
+            if (c == 'L') { if (Value > 100) goto usage; params.depth_target_percent = Value; }
+            if (c == 'Q') { if (Value > 6) goto usage; params.synthesis_solver_mode = Value; }
+            if (c == 'R') { if (!Value || Value > INT_MAX) goto usage; params.nruns = Value; }
+            if (c == 'S') { if (Value < 2 || Value >= INT_MAX) goto usage; params.subcircuit_max_size = Value; }
+            if (c == 'X') params.additional_gates = Value;
+            if (c == 'Z') { if (!Value) goto usage; params.ncores = Value; }
+            if (c == 'z') { if (Value < 2 || Value > 16) goto usage; params.cut_input_limit = Value; }
+            break;
+        }
+        case 'P':
+        case 'T':
+        case 'U':
+        {
+            char * pEnd;
+            const char * pText;
+            double Value, Limit = c == 'P' ? 1.0 : c == 'U' ? (double)INT_MAX : (double)UINT_MAX;
+            if (globalUtilOptind >= argc) goto usage;
+            pText = argv[globalUtilOptind++];
+            errno = 0;
+            Value = strtod(pText, &pEnd);
+            if (pText == pEnd || *pEnd || errno == ERANGE || !(Value > 0 && Value <= Limit))
+                goto usage;
+            if (c == 'P') params.expansion_probability = Value;
+            if (c == 'T') params.timeout = Value;
+            if (c == 'U') params.relation_generation_timeout = Value;
+            break;
+        }
+        case 'V':
+            if (globalUtilOptind >= argc || !Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.verbosity_level) || params.verbosity_level > 3)
+                goto usage;
+            break;
+        case 'W':
+            if (globalUtilOptind + 1 >= argc ||
+                !Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.nWindows) || !params.nWindows ||
+                !Es2_ReadNonnegativeInt(argv[globalUtilOptind++], &params.window_size) || !params.window_size)
+                goto usage;
+            break;
+        case 'N':
+        {
+            char * pEnd;
+            const char * pText;
+            long Seed;
+            if (globalUtilOptind >= argc) goto usage;
+            pText = argv[globalUtilOptind++];
+            errno = 0;
+            Seed = strtol(pText, &pEnd, 10);
+            if (pText == pEnd || *pEnd || errno == ERANGE || Seed < INT_MIN || Seed > INT_MAX)
+                goto usage;
+            params.fix_seed = 1;
+            params.seed = (int)Seed;
+            break;
+        }
+        case 'c': params.critical_path_selection_bias ^= 1; break;
+        case 'f': params.forward_search ^= 1; break;
+        case 'i': params.apply_inprocessing ^= 1; break;
+        case 'j': params.refine_depth ^= 1; break;
+        case 'r': params.local_relations ^= 1; break;
+        case 's': params.fill_subcircuits ^= 1; break;
+        case 't': params.use_taboo_list ^= 1; break;
+        case 'v': params.exhaustive_relations ^= 1; break;
+        case '/': fAdvanced = 1; fHelp = 1; goto usage;
+        case 'h': fHelp = 1; goto usage;
+        default: goto usage;
+        }
+    }
+    if (globalUtilOptind != argc) goto usage;
+    if ((params.nWindows || params.ncores > 1) && params.synthesis_approach > 1)
+    {
+        Abc_Print(-1, "Windows require -D 0 or -D 1.\n");
+        return 1;
+    }
+    pNtk = Abc_FrameReadNtk(pAbc);
+    if (pNtk == NULL)
+    {
+        Abc_Print(-1, "Empty network.\n");
+        return 1;
+    }
+    if (!Abc_NtkIsLogic(pNtk) || !Abc_NtkIsComb(pNtk))
+    {
+        Abc_Print(-1, "This command requires a combinational logic network.\n");
+        return 1;
+    }
+    if (!params.gate_size) params.gate_size = Abc_MaxInt(2, Abc_NtkGetFaninMax(pNtk));
+    if (params.gate_size > 6 || Abc_NtkGetFaninMax(pNtk) > params.gate_size)
+    {
+        Abc_Print(-1, "The input network has nodes wider than -G; map it to the requested LUT size first.\n");
+        return 1;
+    }
+    if (!Abc_NtkHasSop(pNtk) && !Abc_NtkToSop(pNtk, -1, ABC_INFINITY))
+        return 1;
+    pNtknew = applyelSLIM2(pNtk, &params);
+    if (pNtknew == NULL)
+    {
+        Abc_Print(-1, "eSLIM2 could not process the given LUT network.\n");
+        return 1;
+    }
+    Abc_FrameReplaceCurrentNetwork(pAbc, pNtknew);
+    return 0;
+
+usage:
+    if (!fHelp) {
+        if (c != EOF) Abc_Print(-1, "elslim2: invalid or missing argument for -%c near '%s'.\n", c, argv[globalUtilOptind > 1 ? globalUtilOptind - 1 : 0]);
+        else Abc_Print(-1, "elslim2: unexpected argument '%s'.\n", argv[globalUtilOptind]);
+    }
+    Es2_SetLutParams(&params);
+    if (!fAdvanced) { Es2_PrintUsage(&params, 1); return 1; }
+    Abc_Print(-2, "usage: elslim2 [-BCDEGIJLNPQRSTUVWXZz <num>] [-cfhijrstv]\n");
+    Abc_Print(-2, "\t           LUT optimization using the consolidated eSLIM2 engine\n");
+    Abc_Print(-2, "\t-0       : toggle heuristic early stopping [default = yes]\n");
+    Abc_Print(-2, "\t-1 <num> : evaluated cuts per root before retry/escalation [default = %u]\n", params.nselection_trials);
+    Abc_Print(-2, "\t-B <num> : base synthesis budget per size in milliseconds (0 = legacy) [default = %u]\n", params.synthesis_timeout_ms);
+    Abc_Print(-2, "\t-C <m> [n]: bound relation fanout/fanin levels when local contexts are disabled with -r\n");
+    Abc_Print(-2, "\t-D <num> : mode: 0 = area, 1 = area with depth bound, 2 = area then depth, 3 = depth [default = %d]\n", params.synthesis_approach);
+    Abc_Print(-2, "\t-E <num> : extra existing divisors per cut (0 to 8) [default = %u]\n", params.max_divisors);
+    Abc_Print(-2, "\t-G <num> : maximum LUT fanins, including the input network (2 to 6) [default = input width]\n");
+    Abc_Print(-2, "\t-I <num> : maximum iterations per run (0 = no limit) [default = %u]\n", params.iterations);
+    Abc_Print(-2, "\t           With -I: 100 conflicts per nominal -B millisecond, 100000 per -U second.\n");
+    Abc_Print(-2, "\t-J <num> : native LUT restructuring: 0 = off, 1 = once, 2 = adaptive, 3 to 6 = periodic [default = %u]\n", params.rewrite_mode);
+    Abc_Print(-2, "\t-L <num> : protect depth gains down to this percent of input levels (0 = off) [default = %u]\n", params.depth_target_percent);
+    Abc_Print(-2, "\t-N <num> : random seed [default = 1]\n");
+    Abc_Print(-2, "\t-P <num> : probability of expanding a node [default = %.2f]\n", params.expansion_probability);
+    Abc_Print(-2, "\t-Q <num> : synthesis SAT settings, 0 to 5 = CaDiCaL, 6 = Glucose3 [default = %u]\n", params.synthesis_solver_mode);
+    Abc_Print(-2, "\t-R <num> : number of runs sharing the overall budget [default = %u]\n", params.nruns);
+    Abc_Print(-2, "\t-S <num> : maximum cut size in LUTs [default = %u]\n", params.subcircuit_max_size);
+    Abc_Print(-2, "\t-T <num> : overall elapsed-time budget in seconds (fractional allowed) [default = %g]\n", params.timeout);
+    Abc_Print(-2, "\t-U <num> : relation budget per context in seconds [default = %g]\n", params.relation_generation_timeout);
+    Abc_Print(-2, "\t-V <num> : verbosity, 0 to 3 [default = %d]\n", params.verbosity_level);
+    Abc_Print(-2, "\t-W <m> <n>: select up to m windows of n nodes in modes 0/1\n");
+    Abc_Print(-2, "\t-X <num> : additional LUTs allowed for depth optimization [default = %u]\n", params.additional_gates);
+    Abc_Print(-2, "\t-Z <num> : maximum worker cores [default = 1]\n");
+    Abc_Print(-2, "\t-c       : toggle critical-path selection bias [default = %s]\n", params.critical_path_selection_bias ? "yes" : "no");
+    Abc_Print(-2, "\t-f       : toggle forward expansion [default = %s]\n", params.forward_search ? "yes" : "no");
+    Abc_Print(-2, "\t-h       : print the command usage\n");
+    Abc_Print(-2, "\t-i       : toggle native inprocessing in modes 0/1 [default = %s]\n", params.apply_inprocessing ? "yes" : "no");
+    Abc_Print(-2, "\t-j       : toggle depth refinement after area search in mode 1 [default = %s]\n", params.refine_depth ? "yes" : "no");
+    Abc_Print(-2, "\t-r       : toggle bounded local relations [default = %s]\n", params.local_relations ? "yes" : "no");
+    Abc_Print(-2, "\t-s       : toggle filling rejected cut candidates [default = %s]\n", params.fill_subcircuits ? "yes" : "no");
+    Abc_Print(-2, "\t-t       : toggle the taboo list [default = %s]\n", params.use_taboo_list ? "yes" : "no");
+    Abc_Print(-2, "\t-v       : toggle exhaustive relations with SAT fallback [default = %s]\n", params.exhaustive_relations ? "yes" : "no");
+    Abc_Print(-2, "\t-z <num> : maximum cut inputs, including divisors (at least -G, at most 16) [default = %u]\n", params.cut_input_limit);
+    Abc_Print(-2, "\t           Examples: if -K 4; elslim2 -G 4 -T 300 -N 1\n");
+    Abc_Print(-2, "\t                     if -K 6; elslim2 -G 6 -T 600 -N 1\n");
+    return 1;
+}
+
+ABC_NAMESPACE_IMPL_END
+
+////////////////////////////////////////////////////////////////////////
+///                           END OF FILE                            ///
+////////////////////////////////////////////////////////////////////////

@@ -509,7 +509,7 @@ private:
     assert( num_vars <= 16 );
 
     /* init combinations */
-    uint32_t pComb[16], pInvPerm[16], shared_set[4];
+    uint32_t pComb[16], pInvPerm[16], shared_set[6];
     for ( uint32_t i = 0; i < num_vars; ++i )
     {
       pComb[i] = pInvPerm[i] = i;
@@ -775,6 +775,8 @@ private:
 
   inline int check_shared_set_multi( STT const& tt, uint32_t target_num_ss, uint32_t* res_shared )
   {
+    assert( best_free_set <= 6 );
+    if ( best_free_set > 6 ) return -1;
     /* init combinations */
     uint32_t pComb[6], pInvPerm[6];
 
@@ -796,7 +798,9 @@ private:
             res_shared[j] = pComb[j];
           }
           /* sort vars */
-          std::sort( res_shared, res_shared + i );
+          for ( uint32_t j = 1; j < i; ++j )
+            for ( uint32_t k = j; k > 0 && res_shared[k] < res_shared[k - 1]; --k )
+              std::swap( res_shared[k], res_shared[k - 1] );
           return i;
         }
       } while ( combinations_next_simple( i, pComb, pInvPerm, num_vars - best_free_set ) );
@@ -821,7 +825,7 @@ private:
     uint32_t const next_group = 1 << ( num_vars - best_free_set - num_shared_vars );
 
     uint64_t fs_fun[32] = { 0 };
-    uint64_t dc_mask = ( ( UINT64_C( 1 ) << next_group ) - 1 );
+    uint64_t dc_mask = next_group == 64 ? UINT64_MAX : ( ( UINT64_C( 1 ) << next_group ) - 1 );
 
     uint32_t group_index = 0;
     uint32_t set_index = 0;
@@ -891,6 +895,8 @@ private:
       if ( bs_support_size < i )
       {
         kitty::swap_inplace( bs, bs_support_size, i );
+        // Keep the care set in the same variable order as the function.
+        kitty::swap_inplace( care, bs_support_size, i );
       }
 
       bs_support[bs_support_size] = i;

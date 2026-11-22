@@ -56,8 +56,8 @@ struct Mf_Obj_t_
     int             iCutSet;        // cutset
     float           Flow;           // area
     float           nFlowRefs;      // flow references
-    unsigned        Delay    : 16;  // delay 
-    unsigned        nMapRefs : 16;  // map references
+    unsigned        Delay;          // delay 
+    unsigned        nMapRefs;       // map references
 };
 typedef struct Mf_Man_t_ Mf_Man_t; 
 struct Mf_Man_t_
@@ -76,6 +76,10 @@ struct Mf_Man_t_
     int             iCur;           // current position
     int             Iter;           // mapping iterations
     int             fUseEla;        // use exact area
+    int           (*pFuncStop)(void *); // optional per-invocation cancellation
+    void *          pStopData;
+    int             fStopped;
+    int             fCnfSupport;   // normalize support for the opt-in CNF interface
     // statistics
     abctime         clkStart;       // starting time
     double          CutCount[4];    // cut counts
@@ -104,6 +108,24 @@ extern int Kit_TruthToGia( Gia_Man_t * pMan, unsigned * pTruth, int nVars, Vec_I
 ////////////////////////////////////////////////////////////////////////
 ///                     FUNCTION DEFINITIONS                         ///
 ////////////////////////////////////////////////////////////////////////
+
+/**Function*************************************************************
+
+  Synopsis    [Latches a caller's cancellation request.]
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+static int Mf_ManCheckStop( Mf_Man_t * p )
+{
+    if ( !p->fStopped && p->pFuncStop )
+        p->fStopped = p->pFuncStop( p->pStopData );
+    return p->fStopped;
+}
 
 /**Function*************************************************************
 
@@ -259,6 +281,27 @@ static inline void Mf_CutPrintOne( int * pCut )
     printf( " }\n" );
 }
 static inline int Mf_CubeLit( int Cube, int iVar ) { return (Cube >> (iVar << 1)) & 3; }
+
+/**Function*************************************************************
+
+  Synopsis    [Counts or derives clauses for a mapped cut.]
+
+  Description [The general ISOP routine handles nine inputs. Each minterm
+  belongs to one polarity, so the two covers need at most 2^nLeaves cubes.]
+
+  SideEffects []
+
+  SeeAlso     [Mf_ManDeriveCnfs]
+
+***********************************************************************/
+static inline int Mf_CutCnf( word * pTruth, int nLeaves, int * pCover )
+{
+    assert( nLeaves <= 9 );
+    if ( nLeaves == 9 )
+        return Abc_IsopCnf( pTruth, nLeaves, (1 << nLeaves) + 1, pCover );
+    return pCover ? Abc_Tt8Cnf( pTruth, nLeaves, pCover ) : Abc_Tt8CnfSize( pTruth, nLeaves );
+}
+
 static inline int Mf_ManCountLits( int * pCnf, int nCubes, int nVars )
 {
     int i, k, nLits = nCubes;
@@ -270,11 +313,12 @@ static inline int Mf_ManCountLits( int * pCnf, int nCubes, int nVars )
 }
 Vec_Int_t * Mf_ManDeriveCnfs( Mf_Man_t * p, int * pnVars, int * pnClas, int * pnLits )
 {
-    int i, k, iFunc, nCubes, nLits, * pCut, pCnf[512];
+    // The two covers use at most one cube per assignment. ISOP needs 32 scratch entries.
+    int i, k, iFunc, nCubes, nLits, * pCut, pCnf[(1 << 9) + 32];
     Vec_Int_t * vLits = Vec_IntStart( Vec_IntSize(&p->vCnfSizes) );
     Vec_Int_t * vCnfs = Vec_IntAlloc( 3 * Vec_IntSize(&p->vCnfSizes) );
     Vec_IntFill( vCnfs, Vec_IntSize(&p->vCnfSizes), -1 );
-    assert( p->pPars->nLutSize <= 8 );
+    assert( p->pPars->nLutSize <= 9 );
     // constant/buffer
     for ( iFunc = 0; iFunc < 2; iFunc++ )
     {
@@ -295,6 +339,12 @@ Vec_Int_t * Mf_ManDeriveCnfs( Mf_Man_t * p, int * pnVars, int * pnClas, int * pn
     *pnLits = 1 + 4 * Gia_ManCoNum(p->pGia);
     Gia_ManForEachAndId( p->pGia, i )
     {
+        if ( !(i & 255) && Mf_ManCheckStop(p) )
+        {
+            Vec_IntFree( vLits );
+            Vec_IntFree( vCnfs );
+            return NULL;
+        }
         if ( !Mf_ObjMapRefNum(p, i) )
             continue;
         pCut = Mf_ObjCutBest( p, i );
@@ -305,7 +355,7 @@ Vec_Int_t * Mf_ManDeriveCnfs( Mf_Man_t * p, int * pnVars, int * pnClas, int * pn
             if ( p->pPars->nLutSize <= 6 )
                 nCubes = Abc_Tt6Cnf( *Vec_MemReadEntry(p->vTtMem, iFunc), Mf_CutSize(pCut), pCnf );
             else
-                nCubes = Abc_Tt8Cnf( Vec_MemReadEntry(p->vTtMem, iFunc), Mf_CutSize(pCut), pCnf );
+                nCubes = Mf_CutCnf( Vec_MemReadEntry(p->vTtMem, iFunc), Mf_CutSize(pCut), pCnf );
             assert( nCubes == Vec_IntEntry(&p->vCnfSizes, iFunc) );
             nLits = Mf_ManCountLits( pCnf, nCubes, Mf_CutSize(pCut) );
             // save CNF
@@ -336,13 +386,14 @@ Vec_Int_t * Mf_ManDeriveCnfs( Mf_Man_t * p, int * pnVars, int * pnClas, int * pn
 ***********************************************************************/
 Cnf_Dat_t * Mf_ManDeriveCnf( Mf_Man_t * p, int fCnfObjIds, int fAddOrCla )
 {
-    Cnf_Dat_t * pCnf; 
+    Cnf_Dat_t * pCnf = NULL;
     Gia_Obj_t * pObj;
     int Id, DriId, nVars, nClas, nLits, iVar = 1, iCla = 0, iLit = 0;
     Vec_Int_t * vCnfs = Mf_ManDeriveCnfs( p, &nVars, &nClas, &nLits );
     Vec_Int_t * vCnfIds = Vec_IntStartFull( Gia_ManObjNum(p->pGia) );
     int pFanins[16], * pCut, * pCnfIds = Vec_IntArray( vCnfIds );
     int i, k, c, iFunc, nCubes, * pCubes, fComplLast;
+    if ( !vCnfs ) goto stopped;
     nVars++;  // zero-ID to remain unused
     if ( fAddOrCla )
     {
@@ -395,6 +446,7 @@ Cnf_Dat_t * Mf_ManDeriveCnf( Mf_Man_t * p, int fCnfObjIds, int fAddOrCla )
     // add clauses for the COs
     Gia_ManForEachCo( p->pGia, pObj, i )
     {
+        if ( !(i & 255) && Mf_ManCheckStop(p) ) goto stopped;
         Id = Gia_ObjId( p->pGia, pObj );
         DriId = Gia_ObjFaninId0( pObj, Id );
 
@@ -417,6 +469,7 @@ Cnf_Dat_t * Mf_ManDeriveCnf( Mf_Man_t * p, int fCnfObjIds, int fAddOrCla )
     // add clauses for the mapping
     Gia_ManForEachAndReverseId( p->pGia, Id )
     {
+        if ( !(Id & 255) && Mf_ManCheckStop(p) ) goto stopped;
         if ( !Mf_ObjMapRefNum(p, Id) )
             continue;
         pCut = Mf_ObjCutBest( p, Id );
@@ -483,7 +536,7 @@ Cnf_Dat_t * Mf_ManDeriveCnf( Mf_Man_t * p, int fCnfObjIds, int fAddOrCla )
     // add closing pointer
     pCnf->pClauses[iCla++] = pCnf->pClauses[0] + iLit;
     // cleanup
-    Vec_IntFree( vCnfs );
+    Vec_IntFreeP( &vCnfs );
     // create mapping of objects into their clauses
     if ( fCnfObjIds )
     {
@@ -491,6 +544,7 @@ Cnf_Dat_t * Mf_ManDeriveCnf( Mf_Man_t * p, int fCnfObjIds, int fAddOrCla )
         pCnf->pObj2Count  = ABC_FALLOC( int, Gia_ManObjNum(p->pGia) );
         for ( i = 0; i < pCnf->nClauses; i++ )
         {
+            if ( !(i & 1023) && Mf_ManCheckStop(p) ) goto stopped;
             Id = Abc_Lit2Var(pCnf->pClauses[i][0]);
             if ( pCnf->pObj2Clause[Id] == -1 )
             {
@@ -528,6 +582,11 @@ Cnf_Dat_t * Mf_ManDeriveCnf( Mf_Man_t * p, int fCnfObjIds, int fAddOrCla )
     }
     Vec_IntFree( vCnfIds );
     return pCnf;
+stopped:
+    Cnf_DataFree( pCnf );
+    Vec_IntFreeP( &vCnfs );
+    Vec_IntFree( vCnfIds );
+    return NULL;
 }
 
 /**Function*************************************************************
@@ -553,8 +612,9 @@ static inline int Mf_CutComputeTruth6( Mf_Man_t * p, Mf_Cut_t * pCut0, Mf_Cut_t 
     t1 = Abc_Tt6Expand( t1, pCut1->pLeaves, pCut1->nLeaves, pCutR->pLeaves, pCutR->nLeaves );
     t =  fIsXor ? t0 ^ t1 : t0 & t1;
     if ( (fCompl = (int)(t & 1)) ) t = ~t;
-    if ( !p->pPars->fCnfObjIds )
-    pCutR->nLeaves = Abc_Tt6MinBase( &t, pCutR->pLeaves, pCutR->nLeaves );
+    // The opt-in CNF interface requires consistent support for cached truths.
+    if ( !p->pPars->fCnfObjIds || p->fCnfSupport )
+        pCutR->nLeaves = Abc_Tt6MinBase( &t, pCutR->pLeaves, pCutR->nLeaves );
     assert( (int)(t & 1) == 0 );
     truthId        = Vec_MemHashInsert(p->vTtMem, &t);
     pCutR->iFunc   = Abc_Var2Lit( truthId, fCompl );
@@ -589,8 +649,10 @@ static inline int Mf_CutComputeTruth( Mf_Man_t * p, Mf_Cut_t * pCut0, Mf_Cut_t *
 //Kit_DsdPrintFromTruth( uTruth, pCutR->nLeaves ), printf("\n" ), printf("\n" );
     truthId        = Vec_MemHashInsert(p->vTtMem, uTruth);
     pCutR->iFunc   = Abc_Var2Lit( truthId, fCompl );
-    if ( (p->pPars->fGenCnf || p->pPars->fGenLit) && truthId == Vec_IntSize(&p->vCnfSizes) && LutSize <= 8 )
-        Vec_IntPush( &p->vCnfSizes, p->pPars->fGenCnf ? Abc_Tt8CnfSize(uTruth, pCutR->nLeaves) : Kit_TruthLitNum((unsigned *)uTruth, pCutR->nLeaves, &p->vCnfMem) );
+    if ( (p->pPars->fGenCnf || p->pPars->fGenLit) && truthId == Vec_IntSize(&p->vCnfSizes) &&
+         (LutSize <= 8 || (LutSize == 9 && p->pPars->fGenCnf)) )
+        Vec_IntPush( &p->vCnfSizes, p->pPars->fGenCnf ? Mf_CutCnf(uTruth, pCutR->nLeaves, NULL) :
+                     Kit_TruthLitNum((unsigned *)uTruth, pCutR->nLeaves, &p->vCnfMem) );
     assert( (int)pCutR->nLeaves <= nOldSupp );
     return (int)pCutR->nLeaves < nOldSupp;
     }
@@ -643,8 +705,10 @@ static inline int Mf_CutComputeTruthMux( Mf_Man_t * p, Mf_Cut_t * pCut0, Mf_Cut_
     assert( (uTruth[0] & 1) == 0 );
     truthId        = Vec_MemHashInsert(p->vTtMem, uTruth);
     pCutR->iFunc   = Abc_Var2Lit( truthId, fCompl );
-    if ( (p->pPars->fGenCnf || p->pPars->fGenLit) && truthId == Vec_IntSize(&p->vCnfSizes) && LutSize <= 8 )
-        Vec_IntPush( &p->vCnfSizes, p->pPars->fGenCnf ? Abc_Tt8CnfSize(uTruth, pCutR->nLeaves) : Kit_TruthLitNum((unsigned *)uTruth, pCutR->nLeaves, &p->vCnfMem) );
+    if ( (p->pPars->fGenCnf || p->pPars->fGenLit) && truthId == Vec_IntSize(&p->vCnfSizes) &&
+         (LutSize <= 8 || (LutSize == 9 && p->pPars->fGenCnf)) )
+        Vec_IntPush( &p->vCnfSizes, p->pPars->fGenCnf ? Mf_CutCnf(uTruth, pCutR->nLeaves, NULL) :
+                     Kit_TruthLitNum((unsigned *)uTruth, pCutR->nLeaves, &p->vCnfMem) );
     assert( (int)pCutR->nLeaves <= nOldSupp );
     return (int)pCutR->nLeaves < nOldSupp;
     }
@@ -1500,7 +1564,8 @@ void Mf_ManPrintQuit( Mf_Man_t * p, Gia_Man_t * pNew )
     float MemMan   = 1.0 * sizeof(Mf_Obj_t) * Gia_ManObjNum(p->pGia) / (1<<20);
     float MemCuts  = 1.0 * sizeof(int) * (1 << 16) * Vec_PtrSize(&p->vPages) / (1<<20);
     float MemTt    = p->vTtMem ? Vec_MemMemory(p->vTtMem) / (1<<20) : 0;
-    float MemMap   = Vec_IntMemory(pNew->vMapping) / (1<<20);
+    // pNew is NULL under fCnfOnly: no mapped network was built
+    float MemMap   = pNew ? Vec_IntMemory(pNew->vMapping) / (1<<20) : 0;
     if ( p->CutCount[0] == 0 )
         p->CutCount[0] = 1;
     if ( !p->pPars->fVerbose )
@@ -1532,7 +1597,10 @@ void Mf_ManComputeCuts( Mf_Man_t * p )
 {
     int i;
     Gia_ManForEachAndId( p->pGia, i )
+    {
+        if ( !(i & 255) && Mf_ManCheckStop(p) ) return;
         Mf_ObjMergeOrder( p, i );
+    }
     Mf_ManSetMapRefs( p );
     Mf_ManPrintStats( p, (char *)(p->fUseEla ? "Ela  " : (p->Iter ? "Area " : "Delay")) );
 }
@@ -1568,6 +1636,7 @@ static inline int Mf_CutAreaRefed( Mf_Man_t * p, int * pCut )
 {
     int Ela1 = Mf_CutDeref_rec( p, pCut );
     int Ela2 = Mf_CutRef_rec( p, pCut );
+    (void)Ela2;
     assert( Ela1 == Ela2 );
     return Ela1;
 }
@@ -1575,6 +1644,7 @@ static inline int Mf_CutAreaDerefed( Mf_Man_t * p, int * pCut )
 {
     int Ela1 = Mf_CutRef_rec( p, pCut );
     int Ela2 = Mf_CutDeref_rec( p, pCut );
+    (void)Ela2;
     assert( Ela1 == Ela2 );
     return Ela1;
 }
@@ -1659,6 +1729,7 @@ static inline void Mf_ObjComputeBestCut( Mf_Man_t * p, int iObj )
     int * pCutSet = Mf_ObjCutSet( p, iObj );
     int * pCut, * pCutBest = NULL;
     int Value1 = -1, Value2 = -1;
+    (void)Value2;
     int i, Time = 0, TimeBest = ABC_INFINITY; 
     float Flow, FlowBest = ABC_INFINITY;
     if ( p->fUseEla && pBest->nMapRefs )
@@ -1815,14 +1886,39 @@ void Mf_ManComputeMapping( Mf_Man_t * p )
 {
     int i;
     Gia_ManForEachAndId( p->pGia, i )
+    {
+        if ( !(i & 255) && Mf_ManCheckStop(p) ) return;
         Mf_ObjComputeBestCut( p, i );
+    }
     Mf_ManSetMapRefs( p );
     Mf_ManPrintStats( p, (char *)(p->fUseEla ? "Ela  " : (p->Iter ? "Area " : "Delay")) );
 }
-Gia_Man_t * Mf_ManPerformMapping( Gia_Man_t * pGia, Jf_Par_t * pPars )
+/**Function*************************************************************
+
+  Synopsis    [Maps a circuit using the requested CNF and cancellation policy.]
+
+  Description [Interrupted calls return no network or partial CNF.]
+
+  SideEffects [The generated CNF is stored in pGia->pData.]
+
+  SeeAlso     [Mf_ManPerformMapping]
+
+***********************************************************************/
+static Gia_Man_t * Mf_ManPerformMappingInt( Gia_Man_t * pGia, Jf_Par_t * pPars,
+    int (*pFuncStop)(void *), void * pStopData, int fCnfSupport )
 {
     Mf_Man_t * p;
-    Gia_Man_t * pNew, * pCls;
+    Gia_Man_t * pNew = NULL, * pCls;
+    // fCnfOnly returns no network, so the CNF is the only output left
+    assert( !pPars->fCnfOnly || pPars->fGenCnf );
+    if ( pPars->fGenCnf && fCnfSupport ) pGia->pData = NULL;
+    // Nine-input CNF cuts are available without the optional truth-table mapping.
+    if ( pPars->fGenCnf && pPars->nLutSize > (pPars->fCnfMapping ? 8 : 9) )
+    {
+        pGia->pData = NULL;
+        return NULL;
+    }
+    if ( pFuncStop && pFuncStop(pStopData) ) return NULL;
     if ( pPars->fGenCnf || pPars->fGenLit )
         pPars->fCutMin = 1;
     if ( Gia_ManHasChoices(pGia) )
@@ -1830,6 +1926,9 @@ Gia_Man_t * Mf_ManPerformMapping( Gia_Man_t * pGia, Jf_Par_t * pPars )
     pCls = pPars->fCoarsen ? Gia_ManDupMuxes(pGia, pPars->nCoarseLimit) : pGia;
     p = Mf_ManAlloc( pCls, pPars );
     p->pGia0 = pGia;
+    p->pFuncStop = pFuncStop;
+    p->pStopData = pStopData;
+    p->fCnfSupport = fCnfSupport;
     if ( pPars->fVerbose && pPars->fCoarsen )
     {
         printf( "Initial " );  Gia_ManPrintMuxStats( pGia );  printf( "\n" );
@@ -1837,15 +1936,26 @@ Gia_Man_t * Mf_ManPerformMapping( Gia_Man_t * pGia, Jf_Par_t * pPars )
     }
     Mf_ManPrintInit( p );
     Mf_ManComputeCuts( p );
+    if ( Mf_ManCheckStop(p) ) goto finish;
     for ( p->Iter = 1; p->Iter < p->pPars->nRounds; p->Iter++ )
+    {
         Mf_ManComputeMapping( p );
+        if ( Mf_ManCheckStop(p) ) goto finish;
+    }
     p->fUseEla = 1;
     for ( ; p->Iter < p->pPars->nRounds + pPars->nRoundsEla; p->Iter++ )
+    {
         Mf_ManComputeMapping( p );
+        if ( Mf_ManCheckStop(p) ) goto finish;
+    }
     //Mf_ManOptimization( p );
     if ( pPars->fVeryVerbose && pPars->fCutMin )
         Vec_MemDumpTruthTables( p->vTtMem, Gia_ManName(p->pGia), pPars->nLutSize );
-    if ( pPars->fCutMin )
+    // the CNF is derived from the cuts, not from the mapped network, so a
+    // caller that wants only the CNF gets no network and does not pay for one
+    if ( pPars->fCnfOnly )
+        pNew = NULL;
+    else if ( pPars->fCutMin )
         pNew = Mf_ManDeriveMappingGia( p );
     else if ( pPars->fCoarsen )
         pNew = Mf_ManDeriveMappingCoarse( p );
@@ -1853,14 +1963,68 @@ Gia_Man_t * Mf_ManPerformMapping( Gia_Man_t * pGia, Jf_Par_t * pPars )
         pNew = Mf_ManDeriveMapping( p );
     if ( p->pPars->fGenCnf )
         pGia->pData = Mf_ManDeriveCnf( p, p->pPars->fCnfObjIds, p->pPars->fAddOrCla );
+    if ( Mf_ManCheckStop(p) )
+    {
+        // Without cut minimization or coarsening, the mapping is attached
+        // directly to the caller's AIG. Discard only the mapping in this case.
+        if ( pNew == pGia )
+        {
+            Vec_IntFreeP( &pGia->vMapping );
+            pNew = NULL;
+        }
+        else
+            Gia_ManStopP( &pNew );
+        if ( pPars->fGenCnf )
+        {
+            Cnf_DataFree( (Cnf_Dat_t *)pGia->pData );
+            pGia->pData = NULL;
+        }
+        goto finish;
+    }
     //if ( p->pPars->fGenCnf || p->pPars->fGenLit )
     //    Mf_ManProfileTruths( p );
-    Gia_ManMappingVerify( pNew );
+    if ( pNew )
+        Gia_ManMappingVerify( pNew );
     Mf_ManPrintQuit( p, pNew );
+finish:
     Mf_ManFree( p );
     if ( pCls != pGia )
         Gia_ManStop( pCls );
     return pNew;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Maps a circuit without a cancellation callback.]
+
+  Description []
+
+  SideEffects []
+
+  SeeAlso     [Mf_ManPerformMappingWithStop]
+
+***********************************************************************/
+Gia_Man_t * Mf_ManPerformMapping( Gia_Man_t * pGia, Jf_Par_t * pPars )
+{
+    return Mf_ManPerformMappingInt( pGia, pPars, NULL, NULL, 0 );
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Maps with support-normalized CNFs and optional cancellation.]
+
+  Description [This opt-in entry point keeps cached CNFs consistent across
+  cut support sizes. The legacy mapping entry point retains its policy.]
+
+  SideEffects [Stores a completed CNF in pGia->pData, or NULL on interruption.]
+
+  SeeAlso     [Mf_ManPerformMapping]
+
+***********************************************************************/
+Gia_Man_t * Mf_ManPerformMappingWithStop( Gia_Man_t * pGia, Jf_Par_t * pPars,
+    int (*pFuncStop)(void *), void * pStopData )
+{
+    return Mf_ManPerformMappingInt( pGia, pPars, pFuncStop, pStopData, 1 );
 }
 
 /**Function*************************************************************
@@ -1887,6 +2051,8 @@ void * Mf_ManGenerateCnf( Gia_Man_t * pGia, int nLutSize, int fCnfObjIds, int fA
     pPars->fAddOrCla   = fAddOrCla;
     pPars->fCnfMapping = fMapping;
     pPars->fVerbose    = fVerbose;
+    // the mapped network is dropped below, so ask for the CNF alone
+    pPars->fCnfOnly    = 1;
     pNew = Mf_ManPerformMapping( pGia, pPars );
     Gia_ManStopP( &pNew );
 //    Cnf_DataPrint( (Cnf_Dat_t *)pGia->pData, 1 );
@@ -1912,4 +2078,3 @@ void Mf_ManDumpCnf( Gia_Man_t * p, char * pFileName, int nLutSize, int fCnfObjId
 
 
 ABC_NAMESPACE_IMPL_END
-

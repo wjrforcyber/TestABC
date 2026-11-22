@@ -58,12 +58,11 @@ static char * DateReadFromDateString( char * datestr );
 ***********************************************************************/
 char * Abc_UtilsGetVersion( Abc_Frame_t * pAbc )
 {
-    static char Version[1000];
 #if __GNUC__
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wdate-time"
 #endif
-    sprintf(Version, "%s (compiled %s %s)", ABC_VERSION, __DATE__, __TIME__);
+    static char Version[] = ABC_VERSION " (compiled " __DATE__ " " __TIME__ ")";
 #if __GNUC__
     #pragma GCC diagnostic pop
 #endif
@@ -83,11 +82,11 @@ char * Abc_UtilsGetVersion( Abc_Frame_t * pAbc )
 ***********************************************************************/
 char * Abc_UtilsGetUsersInput( Abc_Frame_t * pAbc )
 {
-    static char Prompt[5000];
+    static ABC_THREAD_LOCAL char Prompt[5000];
     sprintf( Prompt, "abc %02d> ", pAbc->nSteps );
 #ifdef ABC_USE_READLINE
     {
-    static char * line = NULL;
+    static ABC_THREAD_LOCAL char * line = NULL;
     if (line != NULL) ABC_FREE(line);
     line = readline(Prompt);  
     if (line == NULL){ printf("***EOF***\n"); exit(0); }
@@ -220,6 +219,7 @@ void Abc_UtilsSource( Abc_Frame_t * pAbc )
         home = getenv("HOME");
         if (home){
             char * sPath3 = ABC_ALLOC(char, strlen(home) + 2);
+            if ( !sPath3 ) abort();
             (void) sprintf(sPath3, "%s/", home);
             sPath1 = Extra_UtilFileSearch(".abc.rc", sPath3, "r");
             ABC_FREE(sPath3);
@@ -231,6 +231,7 @@ void Abc_UtilsSource( Abc_Frame_t * pAbc )
         if ( sPath1 && sPath2 ) {
             /* ~/.rc == .rc : Source the file only once */
             char *tmp_cmd = ABC_ALLOC(char, strlen(sPath1)+12);
+            if ( !tmp_cmd ) abort();
             (void) sprintf(tmp_cmd, "source -s %s", sPath1);
             // (void) Cmd_CommandExecute(pAbc, "source -s ~/.abc.rc");
             (void) Cmd_CommandExecute(pAbc, tmp_cmd);
@@ -239,6 +240,7 @@ void Abc_UtilsSource( Abc_Frame_t * pAbc )
         else {
             if (sPath1) {
                 char *tmp_cmd = ABC_ALLOC(char, strlen(sPath1)+12);
+                if ( !tmp_cmd ) abort();
                 (void) sprintf(tmp_cmd, "source -s %s", sPath1);
                 // (void) Cmd_CommandExecute(pAbc, "source -s ~/.abc.rc");
                 (void) Cmd_CommandExecute(pAbc, tmp_cmd);
@@ -246,6 +248,7 @@ void Abc_UtilsSource( Abc_Frame_t * pAbc )
             }
             if (sPath2) {
                 char *tmp_cmd = ABC_ALLOC(char, strlen(sPath2)+12);
+                if ( !tmp_cmd ) abort();
                 (void) sprintf(tmp_cmd, "source -s %s", sPath2);
                 // (void) Cmd_CommandExecute(pAbc, "source -s .abc.rc");
                 (void) Cmd_CommandExecute(pAbc, tmp_cmd);
@@ -274,7 +277,7 @@ void Abc_UtilsSource( Abc_Frame_t * pAbc )
 ******************************************************************************/
 char * DateReadFromDateString( char * datestr )
 {
-  static char result[100];
+  static ABC_THREAD_LOCAL char result[100];
   char        day[10];
   char        month[10];
   char        zone[10];
