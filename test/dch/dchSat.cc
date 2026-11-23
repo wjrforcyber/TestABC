@@ -154,4 +154,115 @@ TEST(DchTest, ComplementedEdgeBlocksSupergateFolding) {
     Aig_ManStop( pAig );
 }
 
+/*!
+  \brief Step 2 of the SAT usage in choice verification: the assumption miter
+  on a provably equivalent pair.
+
+  With fPolarFlip = 0 and fPhase = 0, Dch_NodesAreEquiv solves assumptions
+  (A=1,B=0) then (A=0,B=1); both UNSAT proves the equivalence and each solve
+  records it as a learned clause. The pair is functionally equal but
+  structurally distinct (strash keeps a*(a*b)), so the solver sees two
+  independent Tseitin views over the same leaves. The solver is not created
+  up front: the first Dch_NodesAreEquiv call does the internal recycle.
+*/
+TEST(DchTest, NodesAreEquivProvesEquivalentPair) {
+    // tiny AIG:  A = a & b,  B = a & (a & b)
+    Aig_Man_t * pAig = Aig_ManStart( 8 );
+    Aig_Obj_t * a    = Aig_ObjCreateCi( pAig );
+    Aig_Obj_t * b    = Aig_ObjCreateCi( pAig );
+    Aig_Obj_t * pA   = Aig_And( pAig, a, b );
+    Aig_Obj_t * pB   = Aig_And( pAig, a, pA );
+
+    Dch_Pars_t Pars, * pPars = &Pars;
+    Dch_ManSetDefaultParams( pPars );
+    pPars->fPolarFlip = 0;
+
+    Dch_Man_t * p = Dch_ManCreate( pAig, pPars );
+    p->pAigFraig = Aig_ManStart( 4 );
+
+    // the first SAT call in a manager creates the solver internally
+    ASSERT_EQ( p->pSat, nullptr );
+    int RetValue = Dch_NodesAreEquiv( p, pA, pB );
+    ASSERT_NE( p->pSat, nullptr );
+
+    // both assumption solves are UNSAT
+    EXPECT_EQ( RetValue, 1 );
+    EXPECT_EQ( p->nSatCalls, 1 );
+    EXPECT_EQ( p->nSatCallsUnsat, 2 );
+    EXPECT_EQ( p->nSatCallsSat, 0 );
+
+    // pOld (pA) is encoded first, then pB; pA is folded into pB's supergate
+    EXPECT_EQ( p->nSatVars, 6 );  // const1 + { pA, a, b, pB }
+    EXPECT_EQ( Dch_ObjSatNum(p, pA), 2 );
+    EXPECT_EQ( Dch_ObjSatNum(p, a),  3 );
+    EXPECT_EQ( Dch_ObjSatNum(p, b),  4 );
+    EXPECT_EQ( Dch_ObjSatNum(p, pB), 5 );
+
+    // 6 encoding clauses + 2 learned clauses (conflicts under assumptions
+    // take the analyze_final path, so the solver adds nothing internally;
+    // canceluntil(0) before the explicit addclause keeps vars unassigned)
+    EXPECT_EQ( sat_solver_nclauses(p->pSat), 8 );
+
+    // no memoization at this level: the second call re-solves and re-adds
+    // the same learned clauses as duplicates (bsat does not dedup against
+    // the existing DB). The first solve now conflicts in the assumption
+    // push itself, through the learned clause (!pA + pB)
+    RetValue = Dch_NodesAreEquiv( p, pA, pB );
+    EXPECT_EQ( RetValue, 1 );
+    EXPECT_EQ( p->nSatCalls, 2 );
+    EXPECT_EQ( p->nSatCallsUnsat, 4 );
+    EXPECT_EQ( sat_solver_nclauses(p->pSat), 10 );
+
+    // Dch_ManStop frees pAigFraig but not pAigTotal
+    Dch_ManStop( p );
+    Aig_ManStop( pAig );
+}
+
+/*!
+  \brief Step 2 of the SAT usage in choice verification: the assumption miter
+  on a pair with a counterexample.
+
+  The first solve (A=1, C=0) is satisfiable (a=1, b=1), so the equivalence
+  is disproved after one solve, nothing is learned on the SAT path, and the
+  solver keeps the counterexample model -- the input pattern that
+  Dch_ManResimulateCex consumes in the next step.
+*/
+TEST(DchTest, NodesAreEquivFindsCounterexample) {
+    // tiny AIG:  A = a & b,  C = a & !b
+    Aig_Man_t * pAig = Aig_ManStart( 8 );
+    Aig_Obj_t * a    = Aig_ObjCreateCi( pAig );
+    Aig_Obj_t * b    = Aig_ObjCreateCi( pAig );
+    Aig_Obj_t * pA   = Aig_And( pAig, a, b );
+    Aig_Obj_t * pC   = Aig_And( pAig, a, Aig_Not(b) );
+
+    Dch_Pars_t Pars, * pPars = &Pars;
+    Dch_ManSetDefaultParams( pPars );
+    pPars->fPolarFlip = 0;
+
+    Dch_Man_t * p = Dch_ManCreate( pAig, pPars );
+    p->pAigFraig = Aig_ManStart( 4 );
+
+    int RetValue = Dch_NodesAreEquiv( p, pA, pC );
+
+    // the first assumption solve is SAT: not equivalent
+    EXPECT_EQ( RetValue, 0 );
+    EXPECT_EQ( p->nSatCalls, 1 );
+    EXPECT_EQ( p->nSatCallsSat, 1 );
+    EXPECT_EQ( p->nSatCallsUnsat, 0 );
+
+    // nothing learned on the SAT path
+    EXPECT_EQ( p->nSatVars, 6 );  // const1 + { pA, a, b, pC }
+    EXPECT_EQ( Dch_ObjSatNum(p, pA), 2 );
+    EXPECT_EQ( Dch_ObjSatNum(p, pC), 5 );
+    EXPECT_EQ( sat_solver_nclauses(p->pSat), 6 );
+
+    // the counterexample is still in the model: a=1, b=1 gives A=1, C=0
+    EXPECT_EQ( sat_solver_var_value(p->pSat, Dch_ObjSatNum(p, a)), 1 );
+    EXPECT_EQ( sat_solver_var_value(p->pSat, Dch_ObjSatNum(p, b)), 1 );
+
+    // Dch_ManStop frees pAigFraig but not pAigTotal
+    Dch_ManStop( p );
+    Aig_ManStop( pAig );
+}
+
 ABC_NAMESPACE_IMPL_END
