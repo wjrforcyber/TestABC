@@ -5,6 +5,7 @@ file(COPY ${CMAKE_SOURCE_DIR}/NangateOpenCellLibrary_typical.lib DESTINATION ${C
 add_subdirectory(truth)
 add_subdirectory(gia)
 add_subdirectory(aig)
+add_subdirectory(dch)
 add_subdirectory(miniaig)
 add_subdirectory(util)
 add_subdirectory(sop)
