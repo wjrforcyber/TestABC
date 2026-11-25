@@ -10,4 +10,6 @@ target_link_libraries(aig
 
 gtest_discover_tests(aig
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    # the first launch of a new executable can take several seconds on macOS
+    DISCOVERY_TIMEOUT 60
 )

@@ -10,4 +10,6 @@ target_link_libraries(miniaig
 
 gtest_discover_tests(miniaig
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    # the first launch of a new executable can take several seconds on macOS
+    DISCOVERY_TIMEOUT 60
 )
