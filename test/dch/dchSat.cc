@@ -3,6 +3,15 @@
 #include "proof/dch/dchInt.h"
 #include "misc/util/abc_namespaces.h"
 
+// simulation callbacks defined in dchSim.c but not declared in dchInt.h
+ABC_NAMESPACE_HEADER_START
+extern unsigned Dch_NodeHash( void * p, Aig_Obj_t * pObj );
+extern int      Dch_NodeIsConst( void * p, Aig_Obj_t * pObj );
+extern int      Dch_NodesAreEqual( void * p, Aig_Obj_t * pObj0, Aig_Obj_t * pObj1 );
+extern int      Dch_NodeIsConstCex( void * p, Aig_Obj_t * pObj );
+extern int      Dch_NodesAreEqualCex( void * p, Aig_Obj_t * pObj0, Aig_Obj_t * pObj1 );
+ABC_NAMESPACE_HEADER_END
+
 ABC_NAMESPACE_IMPL_START
 
 /*!
@@ -261,6 +270,113 @@ TEST(DchTest, NodesAreEquivFindsCounterexample) {
     EXPECT_EQ( sat_solver_var_value(p->pSat, Dch_ObjSatNum(p, b)), 1 );
 
     // Dch_ManStop frees pAigFraig but not pAigTotal
+    Dch_ManStop( p );
+    Aig_ManStop( pAig );
+}
+
+/*!
+  \brief Step 3 of the SAT usage in choice verification: counterexample
+  resimulation splits the false candidate class.
+
+  Production reaches Dch_ManResimulateCex when Dch_NodesAreEquiv returns 0:
+  random simulation believed a pair equivalent, SAT disproved it, and the
+  counterexample input pattern is re-simulated so the class manager can
+  split the class. The candidate class here is forged through hand-written
+  simulation words (the one shortcut -- production obtains it from
+  Dch_PerformRandomSimulation); everything else is the real machinery,
+  including the callback swap to the single-pattern comparators that
+  production makes after candidate building (dchSim.c).
+*/
+TEST(DchTest, ResimulateCexSplitsFalseCandidate) {
+    // AIG:  a, b, c CIs;  nAb = a & b;  nAbn = a & !b;  filler chain c·f
+    // padded to 16 objects so the class hash table gets 5 buckets
+    Aig_Obj_t * pObj;
+    Aig_Man_t * pAig = Aig_ManStart( 16 );
+    Aig_Obj_t * a    = Aig_ObjCreateCi( pAig );
+    Aig_Obj_t * b    = Aig_ObjCreateCi( pAig );
+    Aig_Obj_t * c    = Aig_ObjCreateCi( pAig );
+    Aig_Obj_t * nAb  = Aig_And( pAig, a, b );
+    Aig_Obj_t * nAbn = Aig_And( pAig, a, Aig_Not(b) );
+    Aig_Obj_t * pFill = Aig_And( pAig, c, a );  // a new node; Aig_And(c, c) would fold to c
+    int i;
+    for ( i = 0; i < 9; i++ )
+        pFill = Aig_And( pAig, c, pFill );  // Ids 6..15, never touching nAb/nAbn
+
+    // forge the random-simulation result: nAb and nAbn carry the same word,
+    // so Dch_ClassesPrepare buckets them into one candidate class; the
+    // fillers carry the all-zero word, so they become const-1 candidates
+    // and are skipped by the hashing entirely
+    Vec_Ptr_t * vSims = Vec_PtrAllocSimInfo( Aig_ManObjNumMax(pAig), 1 );
+    unsigned * pSim;
+    pSim = (unsigned *)Vec_PtrEntry( vSims, 0 );        pSim[0] = (unsigned)-1; // const1
+    pSim = (unsigned *)Vec_PtrEntry( vSims, a->Id );    pSim[0] = 1;
+    pSim = (unsigned *)Vec_PtrEntry( vSims, b->Id );    pSim[0] = 2;
+    pSim = (unsigned *)Vec_PtrEntry( vSims, c->Id );    pSim[0] = 3;
+    pSim = (unsigned *)Vec_PtrEntry( vSims, nAb->Id );  pSim[0] = 5; // nonzero:
+    pSim = (unsigned *)Vec_PtrEntry( vSims, nAbn->Id ); pSim[0] = 5; // word 0 would make them const-1 candidates
+    for ( i = 6; i < 16; i++ ) {
+        pSim = (unsigned *)Vec_PtrEntry( vSims, i );
+        pSim[0] = 0;
+    }
+
+    Dch_Cla_t * ppClasses = Dch_ClassesStart( pAig );
+    Dch_ClassesSetData( ppClasses, vSims, Dch_NodeHash, Dch_NodeIsConst, Dch_NodesAreEqual );
+    Dch_ClassesPrepare( ppClasses, 0, 0 );
+    // production swaps to the single-pattern comparators before sweeping
+    Dch_ClassesSetData( ppClasses, NULL, NULL, Dch_NodeIsConstCex, Dch_NodesAreEqualCex );
+    Vec_PtrFree( vSims );
+
+    // the forged candidate class: nAb heads, nAbn is its single member
+    EXPECT_EQ( Aig_ObjRepr( pAig, nAbn ), nAb );
+    EXPECT_EQ( Aig_ObjRepr( pAig, nAb ), nullptr );
+
+    Dch_Pars_t Pars, * pPars = &Pars;
+    Dch_ManSetDefaultParams( pPars );
+    pPars->fPolarFlip = 0;
+
+    Dch_Man_t * p = Dch_ManCreate( pAig, pPars );
+    p->ppClasses = ppClasses;
+
+    // mirror the AIG into the fraig AIG the way Dch_ManSweep does
+    p->pAigFraig = Aig_ManStart( Aig_ManObjNumMax( pAig ) );
+    Aig_ManConst1( pAig )->pData = Aig_ManConst1( p->pAigFraig );
+    Aig_ManForEachCi( pAig, pObj, i )
+        pObj->pData = Aig_ObjCreateCi( p->pAigFraig );
+    Aig_ManForEachNode( pAig, pObj, i )
+        pObj->pData = Aig_And( p->pAigFraig,
+            Aig_NotCond( (Aig_Obj_t *)Aig_ObjFanin0(pObj)->pData, Aig_ObjFaninC0(pObj) ),
+            Aig_NotCond( (Aig_Obj_t *)Aig_ObjFanin1(pObj)->pData, Aig_ObjFaninC1(pObj) ) );
+
+    // SAT disproves the forged equivalence; the CEX stays in the model
+    int RetValue = Dch_NodesAreEquiv( p, Dch_ObjFraig(nAb), Dch_ObjFraig(nAbn) );
+    EXPECT_EQ( RetValue, 0 );
+    EXPECT_EQ( p->nSatCalls, 1 );
+    EXPECT_EQ( p->nSatCallsSat, 1 );
+    EXPECT_EQ( p->nSatCallsUnsat, 0 );
+
+    // resimulate: applies the CEX input pattern to the solved cones and
+    // lets the class manager refine the class of nAb
+    Dch_ManResimulateCex( p, nAbn, nAb );
+
+    // the false equivalence is gone: both nodes are singletons now
+    EXPECT_EQ( Aig_ObjRepr( pAig, nAbn ), nullptr );
+    EXPECT_EQ( Aig_ObjRepr( pAig, nAb ), nullptr );
+    // the counterexample pattern propagated through the solved cones:
+    // a=1, b=1 gives nAb=1 but nAbn=0, which is what forced the split
+    EXPECT_EQ( a->fMarkB, 1 );
+    EXPECT_EQ( b->fMarkB, 1 );
+    EXPECT_EQ( nAb->fMarkB, 1 );
+    EXPECT_EQ( nAbn->fMarkB, 0 );
+    // cone stats: the two AND nodes of the solved cones carry SAT vars
+    // (CIs return before the counter in Dch_ManResimulateSolved_rec)
+    EXPECT_EQ( p->nConeThis, 2 );
+    EXPECT_EQ( p->nConeMax, 2 );
+
+    // resimulation leaves fMarkB on the solved cones; Dch_ManSweep cleans
+    // it at the end, and Aig_ManStop asserts clean marks
+    Aig_ManCleanMarkB( pAig );
+
+    // Dch_ManStop frees ppClasses (Dch_ClassesStop) and pAigFraig
     Dch_ManStop( p );
     Aig_ManStop( pAig );
 }
